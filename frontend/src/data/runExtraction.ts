@@ -62,14 +62,49 @@ function delay(ms: number, signal?: AbortSignal): Promise<void> {
   })
 }
 
+// When set (frontend/.env), point at the FastAPI backend; otherwise stay mock.
+const API_URL = import.meta.env.VITE_API_URL as string | undefined
+
 /**
- * @param _file  the uploaded plan (unused by the mock; the backend will use it)
+ * Read a plan into structured constraints. The whole app depends only on this
+ * function — it is the single backend seam (no fetch() scattered elsewhere).
+ *
+ * - With VITE_API_URL set: POST the file to the FastAPI `/extract` endpoint.
+ * - Without it (or on any error): run the local mock simulation. Demo-safe.
+ *
+ * The staged `onStage` callbacks fire either way so the Extract screen animates.
  */
 export async function runExtraction(
-  _file: File | null,
+  file: File | null,
   options: RunExtractionOptions = {},
 ): Promise<ExtractionResult> {
   const { onStage, signal } = options
+
+  if (API_URL && file) {
+    try {
+      // Tick the early stages while the request is in flight for UX parity.
+      onStage?.(EXTRACT_STAGES[0], 0)
+      const body = new FormData()
+      body.append('file', file)
+      const res = await fetch(`${API_URL.replace(/\/$/, '')}/extract`, {
+        method: 'POST',
+        body,
+        signal,
+      })
+      if (!res.ok) throw new Error(`Extract failed: ${res.status}`)
+      for (let i = 1; i < EXTRACT_STAGES.length; i++) {
+        onStage?.(EXTRACT_STAGES[i], i)
+        await delay(220, signal)
+      }
+      return (await res.json()) as ExtractionResult
+    } catch (err) {
+      if ((err as Error)?.name === 'AbortError') throw err
+      // Fall through to the mock so a backend hiccup never breaks the demo.
+      // eslint-disable-next-line no-console
+      console.warn('Backend extract failed, using mock:', (err as Error)?.message)
+    }
+  }
+
   for (let i = 0; i < EXTRACT_STAGES.length; i++) {
     onStage?.(EXTRACT_STAGES[i], i)
     await delay(stageDuration(i), signal)
