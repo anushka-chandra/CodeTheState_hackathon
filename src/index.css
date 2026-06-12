@@ -1,0 +1,139 @@
+@import 'tailwindcss';
+
+/* ─────────────────────────────────────────────────────────────────────────
+   PLANRAUM design tokens — "Vermessungsamt, 2026"  (§5 of the brief)
+   Tailwind v4 CSS-first config: these become utilities like
+   bg-plan-paper, text-ink, border-grid-line, font-display, etc.
+   ───────────────────────────────────────────────────────────────────────── */
+@theme {
+  /* Colors */
+  --color-plan-paper: #edeae2; /* app background — warm grey plan print */
+  --color-ink: #1a1d1a; /* primary text, linework */
+  --color-survey-teal: #0e5e5b; /* primary actions, active states */
+  --color-parcel-red: #c2362b; /* proposed building, FAIL verdicts */
+  --color-seal-amber: #b98a1f; /* REVIEW / medium-confidence chips */
+  --color-grid-line: #c9c4b6; /* hairline rules, drafting grid */
+
+  /* Type families */
+  --font-display: 'Archivo', system-ui, sans-serif;
+  --font-body: 'Inter', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+
+  /* No rounded corners anywhere — plan drawings have corners, not pills */
+  --radius-none: 0px;
+}
+
+/* ── Base layer ─────────────────────────────────────────────────────────── */
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    background-color: var(--color-plan-paper);
+    color: var(--color-ink);
+    font-family: var(--font-body);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Faint drafting grid — app background only (never behind dense text).
+     Applied via the .drafting-grid utility so panels stay clean white. */
+  .drafting-grid {
+    background-image:
+      linear-gradient(to right, var(--color-grid-line) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--color-grid-line) 1px, transparent 1px);
+    background-size: 28px 28px;
+    background-position: -1px -1px;
+  }
+  .drafting-grid-faint {
+    background-image:
+      linear-gradient(to right, var(--color-grid-line) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--color-grid-line) 1px, transparent 1px);
+    background-size: 28px 28px;
+    background-position: -1px -1px;
+    opacity: 1;
+  }
+
+  /* Visible keyboard focus — 2px survey-teal outline (quality floor §5) */
+  :focus-visible {
+    outline: 2px solid var(--color-survey-teal);
+    outline-offset: 2px;
+  }
+
+  /* Number-forward: measurements & verdicts are monospaced like a survey table */
+  input[type='text'],
+  input[type='number'] {
+    font-family: var(--font-mono);
+  }
+}
+
+/* ── Component helpers ──────────────────────────────────────────────────── */
+@layer components {
+  /* A flat white plan sheet: 1px ink border, zero radius, hard tiny shadow */
+  .sheet {
+    background: #ffffff;
+    border: 1px solid var(--color-ink);
+    border-radius: 0;
+  }
+
+  /* Plan title-block field: tiny uppercase eyebrow label */
+  .eyebrow {
+    font-family: var(--font-display);
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    font-weight: 600;
+    font-size: 0.625rem;
+    line-height: 1;
+    color: color-mix(in srgb, var(--color-ink) 55%, transparent);
+  }
+}
+
+/* Source-region flash when a constraint value is clicked in the Review pane */
+@keyframes box-flash {
+  0%,
+  100% {
+    background-color: color-mix(in srgb, var(--color-survey-teal) 8%, transparent);
+  }
+  30% {
+    background-color: color-mix(in srgb, var(--color-seal-amber) 38%, transparent);
+  }
+}
+.box-flash {
+  animation: box-flash 0.9s ease-in-out 1;
+}
+
+/* Print: clean white page, hide app chrome, show only the report */
+@media print {
+  body {
+    background: #ffffff !important;
+  }
+  .drafting-grid,
+  .drafting-grid-faint {
+    background-image: none !important;
+  }
+  @page {
+    margin: 16mm;
+  }
+  #print-report {
+    color: #1a1d1a;
+  }
+}
+
+/* Respect prefers-reduced-motion — motion is restrained by default */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
