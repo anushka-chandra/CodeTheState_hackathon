@@ -7,7 +7,31 @@ interface MapLibreViewerProps extends Viewer3DProps {
   onError?: () => void
 }
 
-const STYLE_URL = 'https://tiles.openfreemap.org/styles/positron'
+const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN as string | undefined
+
+// Use Mapbox Static Tiles API (raster) when a token is available; fall back to OpenFreeMap.
+const mapStyle: string | maplibreStyle = MAPBOX_TOKEN
+  ? {
+      version: 8 as const,
+      sources: {
+        'mapbox-base': {
+          type: 'raster' as const,
+          tiles: [
+            `https://api.mapbox.com/styles/v1/mapbox/light-v11/tiles/{z}/{x}/{y}@2x?access_token=${MAPBOX_TOKEN}`,
+          ],
+          tileSize: 512,
+          attribution: '&copy; <a href="https://www.mapbox.com/">Mapbox</a>',
+        },
+      },
+      layers: [{ id: 'base', type: 'raster' as const, source: 'mapbox-base' }],
+    }
+  : 'https://tiles.openfreemap.org/styles/positron'
+
+type maplibreStyle = {
+  version: 8
+  sources: Record<string, unknown>
+  layers: unknown[]
+}
 
 const PROPOSED_SRC = 'proposed-building'
 const PROPOSED_WALL = 'proposed-wall-extrusion'
@@ -83,7 +107,7 @@ export default function MapLibreViewer({
 
         map = new maplibregl.Map({
           container: containerRef.current,
-          style: STYLE_URL,
+          style: mapStyle as any, // eslint-disable-line @typescript-eslint/no-explicit-any
           center: [center.lon, center.lat],
           zoom: 17.5,
           pitch: 50,
