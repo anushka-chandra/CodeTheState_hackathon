@@ -1,17 +1,23 @@
 """PLANRAUM backend — FastAPI app.
 
-Exposes the extraction API the frontend's runExtraction() seam will call. CORS is
+Exposes the extraction API the frontend's runExtraction() seam calls. CORS is
 open to the Vite dev server by default; override with the ALLOWED_ORIGINS env var
 (comma-separated) in other environments.
 """
 
 import os
+from pathlib import Path
 from typing import Dict, List
 
+from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.routers import extract
+
+# Load .env from project root (one level up from backend/)
+_env_path = Path(__file__).resolve().parent.parent.parent / ".env"
+load_dotenv(_env_path)
 
 app = FastAPI(
     title="PLANRAUM API",

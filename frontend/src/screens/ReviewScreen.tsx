@@ -27,7 +27,6 @@ export default function ReviewScreen({ onContinue }: ReviewScreenProps) {
     zones,
     selectedZoneId,
     selectZone,
-    cachedExample,
     updateConstraintValue,
     setConfirmed,
   } = usePlan()
@@ -122,12 +121,6 @@ export default function ReviewScreen({ onContinue }: ReviewScreenProps) {
                 .join(' · ')}
             </p>
           </div>
-          {cachedExample && (
-            <span className="inline-flex items-center gap-1.5 border border-seal-amber bg-seal-amber/10 px-2 py-0.5 font-display text-[0.55rem] uppercase tracking-[0.12em] text-seal-amber">
-              <span className="h-1.5 w-1.5 bg-current" aria-hidden />
-              {t('review.cachedNotice')}
-            </span>
-          )}
         </div>
 
         {/* Zone picker — only when the plan defines more than one zone */}

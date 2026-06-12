@@ -5,13 +5,10 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   server: {
-    // Local dev with HMR + real extraction: run `vercel dev` (functions on
-    // :3000) alongside `npm run dev`, and /api is proxied to it. If nothing is
-    // listening there, the request fails and the app falls back to the cached
-    // example — never a broken screen.
+    // Proxy /api requests to the FastAPI backend on :8000.
     proxy: {
       '/api': {
-        target: 'http://localhost:3000',
+        target: 'http://localhost:8000',
         changeOrigin: true,
       },
     },

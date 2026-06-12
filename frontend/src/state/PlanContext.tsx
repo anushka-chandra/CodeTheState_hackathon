@@ -43,8 +43,6 @@ export interface PlanState {
   file: File | null
   /** Displayable source image for the Review pane (object URL / asset / data URL). */
   planImageUrl: string | null
-  /** True when the live extraction failed and we served the bundled example. */
-  cachedExample: boolean
 }
 
 interface PlanContextValue extends PlanState {
@@ -54,7 +52,6 @@ interface PlanContextValue extends PlanState {
     opts?: {
       file?: File | null
       planImageUrl?: string | null
-      cached?: boolean
     },
   ) => void
   /** Switch the active zone and re-seed working copies from it. */
@@ -79,7 +76,6 @@ const emptyState: PlanState = {
   activeFootprint: null,
   file: null,
   planImageUrl: null,
-  cachedExample: false,
 }
 
 /** Normalise a result into a list of zones (always ≥ 1). */
@@ -95,30 +91,21 @@ function zonesOf(result: ExtractionResult): PlanZone[] {
   ]
 }
 
-/**
- * Seed proposed values from a zone's constraints. For the bundled example
- * (`demo`) we tune one deliberate FAIL so the compliance feature always shows;
- * for live extractions proposed starts equal to the extracted values.
- */
+/** Seed proposed values from a zone's constraints (starts equal to extracted). */
 function seedProposed(
   constraints: Constraint[],
-  demo: boolean,
 ): Record<string, string | number> {
   const proposed: Record<string, string | number> = {}
   for (const c of constraints) proposed[c.key] = c.value
-  if (demo) {
-    if ('max_height' in proposed) proposed['max_height'] = 11.4
-    if ('roof_pitch' in proposed) proposed['roof_pitch'] = 38
-  }
   return proposed
 }
 
-function seedFromZone(zone: PlanZone, fallback: Polygon, demo: boolean) {
+function seedFromZone(zone: PlanZone, fallback: Polygon) {
   const constraints = zone.constraints.map((c) => ({ ...c }))
   return {
     constraints,
     confirmed: {} as Record<string, boolean>,
-    proposed: seedProposed(constraints, demo),
+    proposed: seedProposed(constraints),
     activeFootprint: zone.footprint ?? fallback,
   }
 }
@@ -132,12 +119,10 @@ export function PlanProvider({ children }: { children: ReactNode }) {
       opts: {
         file?: File | null
         planImageUrl?: string | null
-        cached?: boolean
       } = {},
     ) => {
       const zones = zonesOf(result)
-      const demo = opts.cached === true
-      const seeded = seedFromZone(zones[0], result.footprint, demo)
+      const seeded = seedFromZone(zones[0], result.footprint)
       setState((prev) => ({
         result,
         zones,
@@ -145,7 +130,6 @@ export function PlanProvider({ children }: { children: ReactNode }) {
         ...seeded,
         file: opts.file ?? prev.file,
         planImageUrl: opts.planImageUrl ?? prev.planImageUrl,
-        cachedExample: opts.cached ?? false,
       }))
     },
     [],
@@ -156,7 +140,7 @@ export function PlanProvider({ children }: { children: ReactNode }) {
       if (!prev.result || zoneId === prev.selectedZoneId) return prev
       const zone = prev.zones.find((z) => z.id === zoneId)
       if (!zone) return prev
-      const seeded = seedFromZone(zone, prev.result.footprint, prev.cachedExample)
+      const seeded = seedFromZone(zone, prev.result.footprint)
       return { ...prev, selectedZoneId: zoneId, ...seeded }
     })
   }, [])

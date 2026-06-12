@@ -59,5 +59,5 @@ export async function planFileToImages(file: File): Promise<string[]> {
   const name = file.name.toLowerCase()
   if (name.endsWith('.pdf')) return pdfToImages(file)
   if (/\.(png|jpe?g)$/.test(name)) return [await imageFileToDataUrl(file)]
-  return [] // TIFF / unknown — caller falls back to the cached example
+  return [] // TIFF / unknown — not renderable in the browser
 }

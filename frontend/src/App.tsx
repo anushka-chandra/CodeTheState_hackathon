@@ -55,7 +55,6 @@ function Screen({
       return (
         <UploadScreen
           onExtract={() => onNavigate('extract')}
-          onUseExample={() => onNavigate('review')}
         />
       )
     case 'extract':

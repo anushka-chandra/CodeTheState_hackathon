@@ -16,6 +16,8 @@ ConstraintKey = Literal[
     "grz",
     "gfz",
     "floors",
+    "bauweise",
+    "bezugspunkt",
 ]
 
 Confidence = Literal["high", "medium", "low"]
@@ -61,8 +63,16 @@ class Polygon(BaseModel):
     coordinates: List[List[List[float]]]
 
 
+class PlanZone(BaseModel):
+    id: str
+    name: str
+    constraints: List[Constraint]
+    footprint: Optional[Polygon] = None
+
+
 class ExtractionResult(BaseModel):
     plan: PlanMeta
     constraints: List[Constraint]
     footprint: Polygon
+    zones: Optional[List[PlanZone]] = None
     sourcePage: Optional[int] = None  # noqa: N815

@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { usePlan } from '../state/PlanContext'
 import { useI18n } from '../i18n/I18nContext'
-import { mockExtraction } from '../data/mockExtraction'
 import {
   ACCEPT_ATTR,
   formatBytes,
@@ -13,17 +12,12 @@ import { renderPdfThumbnail } from '../data/pdfThumbnail'
 interface UploadScreenProps {
   /** A real file is staged → run extraction. */
   onExtract: () => void
-  /** Demo safety net → straight to Review with mock data. */
-  onUseExample: () => void
 }
-
-const EXAMPLE_IMG = '/data/example-plan.svg'
 
 export default function UploadScreen({
   onExtract,
-  onUseExample,
 }: UploadScreenProps) {
-  const { file, setFile, setPlanImageUrl, loadResult } = usePlan()
+  const { file, setFile, setPlanImageUrl } = usePlan()
   const { t } = useI18n()
   const [dragging, setDragging] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -92,11 +86,6 @@ export default function UploadScreen({
     },
     [acceptFile],
   )
-
-  function useExample() {
-    loadResult(mockExtraction, { planImageUrl: EXAMPLE_IMG })
-    onUseExample()
-  }
 
   const planNumber = file ? parsePlanNumber(file.name) : undefined
 
@@ -187,16 +176,6 @@ export default function UploadScreen({
             </p>
           )}
 
-          <div className="mt-4 flex items-center justify-between border-t border-grid-line pt-3">
-            <p className="font-body text-xs text-ink/50">{t('upload.noPlan')}</p>
-            <button
-              type="button"
-              onClick={useExample}
-              className="font-display text-[0.65rem] uppercase tracking-[0.14em] text-survey-teal underline decoration-survey-teal/40 underline-offset-4 hover:decoration-survey-teal"
-            >
-              {t('upload.useExample')} →
-            </button>
-          </div>
         </div>
       </section>
 
