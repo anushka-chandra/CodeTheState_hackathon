@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { usePlan } from '../state/PlanContext'
 import { useI18n } from '../i18n/I18nContext'
 import { evaluateCompliance, summarise } from '../data/compliance'
@@ -7,6 +7,7 @@ import { useCityBuildings } from '../data/useCityBuildings'
 import Viewer3D from '../viewer/Viewer3D'
 import VerdictChip from '../components/VerdictChip'
 import PlanStempel from '../components/PlanStempel'
+import { exportGeoJSON, exportCityGML } from '../data/exportQGIS'
 import type { ComplianceRow, Constraint } from '../types'
 
 const ROOF_OPTIONS = ['Satteldach', 'Walmdach', 'Flachdach', 'Pultdach', 'Zeltdach']
@@ -24,11 +25,10 @@ export default function ComplianceScreen() {
     activeFootprint,
     zones,
     selectedZoneId,
-    cachedExample,
     updateProposed,
   } = usePlan()
   const { t, lang } = useI18n()
-  const cityBuildings = useCityBuildings()
+  const cityBuildings = useCityBuildings(result?.plan.centroidWGS84)
 
   const rows = useMemo(
     () => evaluateCompliance(constraints, proposed, lang),
@@ -66,12 +66,6 @@ export default function ComplianceScreen() {
                   {t('compliance.zoneLabel')} · {selectedZone.name}
                 </span>
               )}
-              {cachedExample && (
-                <span className="inline-flex items-center gap-1 border border-seal-amber bg-seal-amber/10 px-1.5 py-0.5 font-display text-[0.55rem] uppercase tracking-[0.12em] text-seal-amber">
-                  <span className="h-1.5 w-1.5 bg-current" aria-hidden />
-                  {t('review.cachedNotice')}
-                </span>
-              )}
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-3 font-mono text-[0.6rem] text-ink/55">
@@ -102,13 +96,12 @@ export default function ComplianceScreen() {
               {t('compliance.baunvo')}
             </h2>
           </div>
-          <button
-            type="button"
-            onClick={() => window.print()}
-            className="border border-ink bg-white px-3 py-1.5 font-display text-[0.6rem] uppercase tracking-[0.14em] text-ink transition-colors hover:bg-plan-paper"
-          >
-            {t('compliance.export')}
-          </button>
+          <ExportMenu
+            onGeoJSON={() => exportGeoJSON(result, proposed, activeFootprint ?? result.footprint)}
+            onCityGML={() => exportCityGML(result, proposed, activeFootprint ?? result.footprint)}
+            onPrint={() => window.print()}
+            t={t}
+          />
         </div>
 
         {/* Plan-Stempel */}
@@ -179,6 +172,56 @@ function Legend({ color, label }: { color: string; label: string }) {
       <span className="h-2.5 w-2.5" style={{ background: color }} aria-hidden />
       {label}
     </span>
+  )
+}
+
+function ExportMenu({
+  onGeoJSON,
+  onCityGML,
+  onPrint,
+  t,
+}: {
+  onGeoJSON: () => void
+  onCityGML: () => void
+  onPrint: () => void
+  t: (key: string) => string
+}) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="border border-ink bg-white px-3 py-1.5 font-display text-[0.6rem] uppercase tracking-[0.14em] text-ink transition-colors hover:bg-plan-paper"
+      >
+        {t('compliance.export')} ▾
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full z-20 mt-1 flex min-w-[160px] flex-col border border-ink bg-white shadow-md">
+          <button
+            type="button"
+            onClick={() => { onGeoJSON(); setOpen(false) }}
+            className="px-3 py-2 text-left font-display text-[0.6rem] uppercase tracking-[0.12em] text-ink hover:bg-survey-teal/10"
+          >
+            {t('compliance.exportGeoJSON')}
+          </button>
+          <button
+            type="button"
+            onClick={() => { onCityGML(); setOpen(false) }}
+            className="border-t border-grid-line px-3 py-2 text-left font-display text-[0.6rem] uppercase tracking-[0.12em] text-ink hover:bg-survey-teal/10"
+          >
+            {t('compliance.exportCityGML')}
+          </button>
+          <button
+            type="button"
+            onClick={() => { onPrint(); setOpen(false) }}
+            className="border-t border-grid-line px-3 py-2 text-left font-display text-[0.6rem] uppercase tracking-[0.12em] text-ink hover:bg-survey-teal/10"
+          >
+            {t('compliance.exportPDF')}
+          </button>
+        </div>
+      )}
+    </div>
   )
 }
 

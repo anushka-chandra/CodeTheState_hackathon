@@ -1,24 +1,33 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useMemo, useState, useCallback } from 'react'
 import type { Map as MlMap, GeoJSONSource } from 'maplibre-gl'
 import type { Viewer3DProps } from './Viewer3D.types'
+import { buildProposedFeatures } from './buildingGeometry'
 
 interface MapLibreViewerProps extends Viewer3DProps {
-  /** Called if MapLibre can't initialise (no WebGL, style load failure) so the
-   *  caller can fall back to the schematic placeholder — protects the demo. */
   onError?: () => void
 }
 
-// Key-free basemap (no token). OpenFreeMap positron suits the muted aesthetic.
 const STYLE_URL = 'https://tiles.openfreemap.org/styles/positron'
 
 const PROPOSED_SRC = 'proposed-building'
-const PROPOSED_LAYER = 'proposed-building-extrusion'
+const PROPOSED_WALL = 'proposed-wall-extrusion'
+const PROPOSED_ROOF = 'proposed-roof-extrusion'
 const CITY_SRC = 'city-buildings'
 const CITY_LAYER = 'city-buildings-extrusion'
 
-function proposedColor(compliant: boolean): string {
-  // red if non-compliant, warmer amber-red if compliant (§4 interface).
-  return compliant ? '#D7503F' : '#C2362B'
+function wallColor(compliant: boolean): string {
+  return compliant ? '#E85040' : '#D42B1A'
+}
+function roofColor(compliant: boolean): string {
+  return compliant ? '#CC3A2A' : '#B81E10'
+}
+
+const CITY_PAINT = {
+  'fill-extrusion-color': '#a09b90',
+  'fill-extrusion-height': ['case', ['has', 'height'], ['to-number', ['get', 'height'], 8], 8] as unknown as number,
+  'fill-extrusion-base': 0,
+  'fill-extrusion-opacity': 0.75,
+  'fill-extrusion-vertical-gradient': true,
 }
 
 export default function MapLibreViewer({
@@ -30,16 +39,45 @@ export default function MapLibreViewer({
 }: MapLibreViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<MlMap | null>(null)
-  const readyRef = useRef(false)
+  const [mapReady, setMapReady] = useState(false)
 
-  // Init once.
+  const proposedFC = useMemo(
+    () =>
+      buildProposedFeatures(
+        proposed.footprint,
+        proposed.heightM,
+        proposed.roofType,
+        proposed.roofPitchDeg ?? 35,
+        proposed.compliant,
+      ),
+    [proposed.footprint, proposed.heightM, proposed.roofType, proposed.roofPitchDeg, proposed.compliant],
+  )
+
+  // Shared helper to ensure city buildings layer exists on the map.
+  const ensureCityLayer = useCallback((map: MlMap, data: typeof cityBuildings) => {
+    if (!data?.features.length) return
+    const existing = map.getSource(CITY_SRC) as GeoJSONSource | undefined
+    if (existing) {
+      existing.setData(data)
+    } else {
+      map.addSource(CITY_SRC, { type: 'geojson', data })
+      map.addLayer({
+        id: CITY_LAYER,
+        type: 'fill-extrusion',
+        source: CITY_SRC,
+        paint: CITY_PAINT,
+      })
+    }
+  }, [])
+
+  // Init map once.
   useEffect(() => {
     let disposed = false
     let map: MlMap | null = null
 
     ;(async () => {
       try {
-        const maplibregl = (await import('maplibre-gl')).default
+        const maplibregl = await import('maplibre-gl')
         await import('maplibre-gl/dist/maplibre-gl.css')
         if (disposed || !containerRef.current) return
 
@@ -47,62 +85,50 @@ export default function MapLibreViewer({
           container: containerRef.current,
           style: STYLE_URL,
           center: [center.lon, center.lat],
-          zoom: 17.6,
-          pitch: 58,
-          bearing: -22,
+          zoom: 17.5,
+          pitch: 50,
+          bearing: -15,
           attributionControl: false,
         })
         mapRef.current = map
         map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-right')
 
-        map.on('error', (e) => {
-          // Tile/style errors shouldn't blank the demo; surface only fatal ones.
-          if (!readyRef.current) {
-            // eslint-disable-next-line no-console
-            console.warn('MapLibre error before ready:', e?.error?.message)
-          }
-        })
-
         map.once('load', () => {
           if (disposed || !map) return
-          // City backdrop (grey extrusions) — optional.
-          if (cityBuildings && cityBuildings.features.length) {
-            map.addSource(CITY_SRC, { type: 'geojson', data: cityBuildings })
-            map.addLayer({
-              id: CITY_LAYER,
-              type: 'fill-extrusion',
-              source: CITY_SRC,
-              paint: {
-                'fill-extrusion-color': '#9a958a',
-                'fill-extrusion-height': ['coalesce', ['get', 'height'], 8],
-                'fill-extrusion-base': 0,
-                'fill-extrusion-opacity': 0.85,
-              },
-            })
+
+          // City buildings — add if already available.
+          if (cityBuildings?.features.length) {
+            ensureCityLayer(map, cityBuildings)
           }
 
-          // Proposed building (red extrusion).
-          map.addSource(PROPOSED_SRC, {
-            type: 'geojson',
-            data: {
-              type: 'Feature',
-              properties: {},
-              geometry: proposed.footprint,
+          // Proposed building — multi-part source (walls + roof).
+          map.addSource(PROPOSED_SRC, { type: 'geojson', data: proposedFC })
+          map.addLayer({
+            id: PROPOSED_WALL,
+            type: 'fill-extrusion',
+            source: PROPOSED_SRC,
+            filter: ['==', ['get', 'part'], 'wall'],
+            paint: {
+              'fill-extrusion-color': wallColor(proposed.compliant),
+              'fill-extrusion-height': ['to-number', ['get', 'height'], 0],
+              'fill-extrusion-base': ['to-number', ['get', 'base'], 0],
+              'fill-extrusion-opacity': 0.95,
             },
           })
           map.addLayer({
-            id: PROPOSED_LAYER,
+            id: PROPOSED_ROOF,
             type: 'fill-extrusion',
             source: PROPOSED_SRC,
+            filter: ['==', ['get', 'part'], 'roof'],
             paint: {
-              'fill-extrusion-color': proposedColor(proposed.compliant),
-              'fill-extrusion-height': Math.max(proposed.heightM, 0.5),
-              'fill-extrusion-base': 0,
-              'fill-extrusion-opacity': 0.92,
+              'fill-extrusion-color': roofColor(proposed.compliant),
+              'fill-extrusion-height': ['to-number', ['get', 'height'], 0],
+              'fill-extrusion-base': ['to-number', ['get', 'base'], 0],
+              'fill-extrusion-opacity': 0.95,
             },
           })
 
-          readyRef.current = true
+          setMapReady(true)
           onReady?.()
         })
       } catch {
@@ -112,34 +138,33 @@ export default function MapLibreViewer({
 
     return () => {
       disposed = true
-      readyRef.current = false
+      setMapReady(false)
       map?.remove()
       mapRef.current = null
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Live-update the proposed building when height / compliance / footprint change.
+  // Add/update city buildings when data arrives OR when map becomes ready.
   useEffect(() => {
     const map = mapRef.current
-    if (!map || !readyRef.current) return
+    if (!map || !mapReady || !cityBuildings?.features.length) return
+    ensureCityLayer(map, cityBuildings)
+  }, [cityBuildings, mapReady, ensureCityLayer])
+
+  // Live-update the proposed building.
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !mapReady) return
     const src = map.getSource(PROPOSED_SRC) as GeoJSONSource | undefined
-    if (src) {
-      src.setData({ type: 'Feature', properties: {}, geometry: proposed.footprint })
+    if (src) src.setData(proposedFC)
+    if (map.getLayer(PROPOSED_WALL)) {
+      map.setPaintProperty(PROPOSED_WALL, 'fill-extrusion-color', wallColor(proposed.compliant))
     }
-    if (map.getLayer(PROPOSED_LAYER)) {
-      map.setPaintProperty(
-        PROPOSED_LAYER,
-        'fill-extrusion-height',
-        Math.max(proposed.heightM, 0.5),
-      )
-      map.setPaintProperty(
-        PROPOSED_LAYER,
-        'fill-extrusion-color',
-        proposedColor(proposed.compliant),
-      )
+    if (map.getLayer(PROPOSED_ROOF)) {
+      map.setPaintProperty(PROPOSED_ROOF, 'fill-extrusion-color', roofColor(proposed.compliant))
     }
-  }, [proposed.heightM, proposed.compliant, proposed.footprint])
+  }, [proposedFC, proposed.compliant, mapReady])
 
   return <div ref={containerRef} className="h-full w-full bg-[#15171A]" />
 }

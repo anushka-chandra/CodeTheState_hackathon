@@ -174,8 +174,9 @@ function normaliseConstraint(raw: any): Constraint | null {
 }
 
 function defaultFootprint(center: { lon: number; lat: number }) {
-  const hw = 0.000136
-  const hh = 0.0000629
+  // ~25m x 18m — realistic single-family house plot, visible next to real LOD2 buildings
+  const hw = 0.00018
+  const hh = 0.000082
   return {
     type: 'Polygon' as const,
     coordinates: [
@@ -249,6 +250,8 @@ function normalise(raw: any): ExtractionResult {
 
 function stripFences(text: string): string {
   let t = text.trim()
+  // Strip <think>...</think> blocks (Qwen reasoning tokens).
+  t = t.replace(/<think>[\s\S]*?<\/think>/gi, '').trim()
   // Remove ```json ... ``` or ``` ... ``` fences if present.
   const fence = t.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i)
   if (fence) t = fence[1].trim()
@@ -293,7 +296,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const completion = await client.chat.completions.create({
       model,
       temperature: 0.1,
-      max_tokens: 2000,
+      max_tokens: 4000,
       response_format: { type: 'json_object' },
       messages: [
         {
@@ -315,8 +318,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     res.status(200).json(result)
   } catch (err) {
-    // Do not leak details (which could include prompt/keys). Generic message;
-    // the frontend treats any non-200 as a signal to show the cached example.
-    res.status(502).json({ error: 'Extraction failed' })
+    const message = err instanceof Error ? err.message : 'Unknown error'
+    console.error('[extract]', message)
+    res.status(502).json({ detail: `Extraction failed: ${message}` })
   }
 }

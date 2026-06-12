@@ -48,11 +48,6 @@ export const TRANSLATIONS: Record<string, Entry> = {
     en: 'Drop a plan file here or click to browse',
     de: 'Plandatei hier ablegen oder zum Auswählen klicken',
   },
-  'upload.noPlan': {
-    en: 'No plan handy? Walk the demo with a real Bühl-style sheet.',
-    de: 'Keinen Plan zur Hand? Nutzen Sie für die Demo ein echtes Bühl-Beispielblatt.',
-  },
-  'upload.useExample': { en: 'Use example plan', de: 'Beispielplan verwenden' },
   'upload.staged': { en: 'Staged document', de: 'Bereitgestelltes Dokument' },
   'upload.readyToRead': { en: 'Ready to read', de: 'Bereit zum Auslesen' },
   'upload.nothingStaged': { en: 'Nothing staged', de: 'Nichts bereitgestellt' },
@@ -83,18 +78,18 @@ export const TRANSLATIONS: Record<string, Entry> = {
   },
   'extract.stalled': { en: 'Extraction stalled', de: 'Auslesen unterbrochen' },
   'extract.failBody': {
-    en: "Couldn't read the document — try a PDF export instead of a scan, or use the bundled example to continue the demo.",
-    de: 'Dokument konnte nicht gelesen werden — versuchen Sie einen PDF-Export statt eines Scans oder nutzen Sie das Beispiel, um die Demo fortzusetzen.',
+    en: "Couldn't read the document — try a clearer PDF export instead of a scan, or check that the extraction service is running.",
+    de: 'Dokument konnte nicht gelesen werden — versuchen Sie einen klareren PDF-Export statt eines Scans oder prüfen Sie, ob der Extraktionsdienst läuft.',
   },
   'extract.backToUpload': { en: 'Back to upload', de: 'Zurück zum Upload' },
   'extract.stageDone': { en: 'done', de: 'fertig' },
   'extract.stageReading': { en: 'reading…', de: 'liest…' },
   'extract.stageQueued': { en: 'queued', de: 'in Warteschlange' },
   'extract.footPre': {
-    en: 'Simulated locally · the backend later replaces a single ',
-    de: 'Lokal simuliert · das Backend ersetzt später einen einzigen ',
+    en: 'Powered by ',
+    de: 'Verarbeitet durch ',
   },
-  'extract.footPost': { en: ' call.', de: '-Aufruf.' },
+  'extract.footPost': { en: ' · vision extraction.', de: ' · Vision-Extraktion.' },
 
   // Extraction stage labels (by stage key)
   'stage.reading': { en: 'Reading document', de: 'Dokument wird gelesen' },
@@ -155,10 +150,6 @@ export const TRANSLATIONS: Record<string, Entry> = {
     en: 'Mark as confirmed',
     de: 'Als bestätigt markieren',
   },
-  'review.cachedNotice': {
-    en: 'showing cached example',
-    de: 'zwischengespeichertes Beispiel',
-  },
   'review.zonePick': {
     en: 'Multiple zones found — pick one to review',
     de: 'Mehrere Zonen gefunden — eine zum Prüfen wählen',
@@ -187,6 +178,9 @@ export const TRANSLATIONS: Record<string, Entry> = {
   'compliance.report': { en: 'Compliance report', de: 'Konformitätsbericht' },
   'compliance.baunvo': { en: 'BauNVO check', de: 'BauNVO-Prüfung' },
   'compliance.export': { en: 'Export report', de: 'Bericht exportieren' },
+  'compliance.exportGeoJSON': { en: 'GeoJSON (QGIS)', de: 'GeoJSON (QGIS)' },
+  'compliance.exportCityGML': { en: 'CityGML LOD2', de: 'CityGML LOD2' },
+  'compliance.exportPDF': { en: 'Print / PDF', de: 'Drucken / PDF' },
   'compliance.violated': {
     en: '{fail} of {total} constraints violated',
     de: '{fail} von {total} Vorgaben verletzt',

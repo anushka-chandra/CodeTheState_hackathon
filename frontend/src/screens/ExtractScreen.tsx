@@ -16,7 +16,7 @@ export default function ExtractScreen({ onDone, onAbort }: ExtractScreenProps) {
   const { t } = useI18n()
   // -1 = not started; index of the currently active stage otherwise.
   const [active, setActive] = useState(-1)
-  const [failed, setFailed] = useState(false)
+  const [failed, setFailed] = useState<string | false>(false)
 
   useEffect(() => {
     // No started-once guard: under StrictMode the first run is aborted by the
@@ -30,22 +30,16 @@ export default function ExtractScreen({ onDone, onAbort }: ExtractScreenProps) {
       signal: controller.signal,
       onStage: (_stage, index) => setActive(index),
     })
-      .then(({ result, cached }) => {
+      .then(({ result }) => {
         setActive(EXTRACT_STAGES.length) // all done
         timer = setTimeout(() => {
-          // On fallback, show the full bundled example (image + data) so the
-          // highlighted regions line up with the cached notice.
-          if (cached) {
-            loadResult(result, { cached: true, planImageUrl: '/data/example-plan.svg' })
-          } else {
-            loadResult(result, { cached: false })
-          }
+          loadResult(result)
           onDone()
         }, 450)
       })
       .catch((err) => {
         if (err?.name === 'AbortError') return
-        setFailed(true)
+        setFailed(err?.message || 'Unknown error')
       })
 
     return () => {
@@ -85,7 +79,7 @@ export default function ExtractScreen({ onDone, onAbort }: ExtractScreenProps) {
         {failed ? (
           <div className="flex flex-col items-center gap-4 p-10 text-center">
             <p className="max-w-sm font-body text-sm text-ink/70">
-              {t('extract.failBody')}
+              {typeof failed === 'string' ? failed : t('extract.failBody')}
             </p>
             <button
               type="button"
