@@ -1,13 +1,17 @@
 import type { ExtractionResult } from '../types'
 import { mockExtraction } from './mockExtraction'
+import { planFileToImages } from './planImages'
 
 /**
- * THE data-access seam. Every "read a plan" call goes through here so the
- * backend swap later touches exactly one function — no fetch() scattered
- * through components (hard rule from the brief, §3.2).
+ * THE data-access seam. Every "read a plan" call goes through here — no fetch()
+ * scattered through components.
  *
- * Today: a timed simulation that resolves the bundled mock JSON.
- * Later: replace the body with a real upload + poll, keeping this signature.
+ * One extraction flow: render the upload to page images in the browser, POST
+ * them to the Vercel serverless function at /api/extract, and return the parsed
+ * ExtractionResult. If ANYTHING fails (no images, bad key, no credits, timeout,
+ * bad JSON, network, or no /api in plain `vite dev`), silently fall back to the
+ * bundled cached example and flag it so the UI can show "showing cached example".
+ * This is the only fallback — never a broken screen.
  */
 
 export type ExtractStageKey =
@@ -62,52 +66,67 @@ function delay(ms: number, signal?: AbortSignal): Promise<void> {
   })
 }
 
-// When set (frontend/.env), point at the FastAPI backend; otherwise stay mock.
-const API_URL = import.meta.env.VITE_API_URL as string | undefined
+/** The Vercel serverless extraction endpoint (same-origin). */
+const EXTRACT_ENDPOINT = '/api/extract'
 
-/**
- * Read a plan into structured constraints. The whole app depends only on this
- * function — it is the single backend seam (no fetch() scattered elsewhere).
- *
- * - With VITE_API_URL set: POST the file to the FastAPI `/extract` endpoint.
- * - Without it (or on any error): run the local mock simulation. Demo-safe.
- *
- * The staged `onStage` callbacks fire either way so the Extract screen animates.
- */
-export async function runExtraction(
-  file: File | null,
-  options: RunExtractionOptions = {},
-): Promise<ExtractionResult> {
-  const { onStage, signal } = options
+export interface ExtractionOutcome {
+  result: ExtractionResult
+  /** True when the live call failed and we served the bundled example. */
+  cached: boolean
+}
 
-  if (API_URL && file) {
-    try {
-      // Tick the early stages while the request is in flight for UX parity.
-      onStage?.(EXTRACT_STAGES[0], 0)
-      const body = new FormData()
-      body.append('file', file)
-      const res = await fetch(`${API_URL.replace(/\/$/, '')}/extract`, {
-        method: 'POST',
-        body,
-        signal,
-      })
-      if (!res.ok) throw new Error(`Extract failed: ${res.status}`)
-      for (let i = 1; i < EXTRACT_STAGES.length; i++) {
-        onStage?.(EXTRACT_STAGES[i], i)
-        await delay(220, signal)
-      }
-      return (await res.json()) as ExtractionResult
-    } catch (err) {
-      if ((err as Error)?.name === 'AbortError') throw err
-      // Fall through to the mock so a backend hiccup never breaks the demo.
-      // eslint-disable-next-line no-console
-      console.warn('Backend extract failed, using mock:', (err as Error)?.message)
-    }
-  }
-
-  for (let i = 0; i < EXTRACT_STAGES.length; i++) {
+/** Walk the remaining staged animation (used on the fallback path). */
+async function finishStages(
+  fromIndex: number,
+  onStage: RunExtractionOptions['onStage'],
+  signal?: AbortSignal,
+) {
+  for (let i = fromIndex; i < EXTRACT_STAGES.length; i++) {
     onStage?.(EXTRACT_STAGES[i], i)
     await delay(stageDuration(i), signal)
   }
-  return mockExtraction
+}
+
+export async function runExtraction(
+  file: File | null,
+  options: RunExtractionOptions = {},
+): Promise<ExtractionOutcome> {
+  const { onStage, signal } = options
+
+  try {
+    // Stage 0 — render the upload to page images in the browser.
+    onStage?.(EXTRACT_STAGES[0], 0)
+    if (!file) throw new Error('No file')
+    const images = await planFileToImages(file)
+    if (images.length === 0) throw new Error('No renderable pages')
+    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
+
+    // Stage 1 — send to the serverless vision extractor.
+    onStage?.(EXTRACT_STAGES[1], 1)
+    const res = await fetch(EXTRACT_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ images, filename: file.name }),
+      signal,
+    })
+    if (!res.ok) throw new Error(`extract ${res.status}`)
+
+    // Stage 2 — parse the model's structured answer.
+    onStage?.(EXTRACT_STAGES[2], 2)
+    const result = (await res.json()) as ExtractionResult
+    if (!result?.constraints?.length) throw new Error('empty result')
+
+    // Stages 3–4 — geocode / build candidate (cosmetic ticks).
+    onStage?.(EXTRACT_STAGES[3], 3)
+    await delay(220, signal)
+    onStage?.(EXTRACT_STAGES[4], 4)
+    await delay(220, signal)
+
+    return { result, cached: false }
+  } catch (err) {
+    if ((err as Error)?.name === 'AbortError') throw err
+    // SINGLE fallback rule: any failure → cached example, flagged for the UI.
+    await finishStages(2, onStage, signal).catch(() => {})
+    return { result: mockExtraction, cached: true }
+  }
 }

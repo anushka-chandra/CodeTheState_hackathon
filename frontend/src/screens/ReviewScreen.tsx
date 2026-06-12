@@ -24,6 +24,10 @@ export default function ReviewScreen({ onContinue }: ReviewScreenProps) {
     constraints,
     confirmed,
     planImageUrl,
+    zones,
+    selectedZoneId,
+    selectZone,
+    cachedExample,
     updateConstraintValue,
     setConfirmed,
   } = usePlan()
@@ -105,6 +109,54 @@ export default function ReviewScreen({ onContinue }: ReviewScreenProps) {
           eyebrow={t('review.humanLoop')}
           title={t('review.extracted')}
         />
+
+        {/* Plan title from the extraction result (+ cached notice) */}
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-grid-line px-4 py-2">
+          <div className="min-w-0">
+            <p className="truncate font-display text-[0.8rem] font-bold uppercase tracking-[0.08em] text-ink">
+              {result.plan.name}
+            </p>
+            <p className="font-mono text-[0.65rem] text-ink/55">
+              {[result.plan.planNumber, result.plan.municipality]
+                .filter(Boolean)
+                .join(' · ')}
+            </p>
+          </div>
+          {cachedExample && (
+            <span className="inline-flex items-center gap-1.5 border border-seal-amber bg-seal-amber/10 px-2 py-0.5 font-display text-[0.55rem] uppercase tracking-[0.12em] text-seal-amber">
+              <span className="h-1.5 w-1.5 bg-current" aria-hidden />
+              {t('review.cachedNotice')}
+            </span>
+          )}
+        </div>
+
+        {/* Zone picker — only when the plan defines more than one zone */}
+        {zones.length > 1 && (
+          <div className="flex flex-wrap items-center gap-2 border-b border-grid-line bg-plan-paper/40 px-4 py-2">
+            <span className="eyebrow shrink-0">{t('review.zonePick')}</span>
+            <div className="flex flex-wrap gap-1">
+              {zones.map((z) => {
+                const active = z.id === selectedZoneId
+                return (
+                  <button
+                    key={z.id}
+                    type="button"
+                    onClick={() => selectZone(z.id)}
+                    aria-pressed={active}
+                    className={[
+                      'border px-2.5 py-1 font-display text-[0.6rem] uppercase tracking-[0.1em] transition-colors',
+                      active
+                        ? 'border-ink bg-survey-teal text-white'
+                        : 'border-ink bg-white text-ink/60 hover:bg-plan-paper hover:text-ink',
+                    ].join(' ')}
+                  >
+                    {z.name}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Column header row */}
         <div className="grid grid-cols-[1fr_auto] items-center gap-3 border-b border-ink bg-plan-paper/60 px-4 py-2">

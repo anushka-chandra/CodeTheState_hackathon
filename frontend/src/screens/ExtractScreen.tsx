@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { usePlan } from '../state/PlanContext'
 import { useI18n } from '../i18n/I18nContext'
 import { EXTRACT_STAGES, runExtraction } from '../data/runExtraction'
@@ -17,12 +17,12 @@ export default function ExtractScreen({ onDone, onAbort }: ExtractScreenProps) {
   // -1 = not started; index of the currently active stage otherwise.
   const [active, setActive] = useState(-1)
   const [failed, setFailed] = useState(false)
-  const startedRef = useRef(false)
 
   useEffect(() => {
-    if (startedRef.current) return
-    startedRef.current = true
-
+    // No started-once guard: under StrictMode the first run is aborted by the
+    // cleanup below, and this effect re-runs fresh. The AbortController makes
+    // the aborted run resolve to AbortError (ignored), so exactly one run
+    // completes. In production the effect runs once.
     const controller = new AbortController()
     let timer: ReturnType<typeof setTimeout> | undefined
 
@@ -30,10 +30,16 @@ export default function ExtractScreen({ onDone, onAbort }: ExtractScreenProps) {
       signal: controller.signal,
       onStage: (_stage, index) => setActive(index),
     })
-      .then((result) => {
+      .then(({ result, cached }) => {
         setActive(EXTRACT_STAGES.length) // all done
         timer = setTimeout(() => {
-          loadResult(result) // preserves staged file + plan image
+          // On fallback, show the full bundled example (image + data) so the
+          // highlighted regions line up with the cached notice.
+          if (cached) {
+            loadResult(result, { cached: true, planImageUrl: '/data/example-plan.svg' })
+          } else {
+            loadResult(result, { cached: false })
+          }
           onDone()
         }, 450)
       })

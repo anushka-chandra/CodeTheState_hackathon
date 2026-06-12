@@ -130,6 +130,20 @@ function evaluateRow(
       }
       break
     }
+
+    // Descriptive constraints (Bauweise, Bezugspunkt, …): generic string match.
+    default: {
+      const a = String(c.value).trim().toLowerCase()
+      const p = String(proposed).trim().toLowerCase()
+      if (a === p) {
+        verdict = 'PASS'
+        note = tr('note.genericMatch', { value: c.value })
+      } else {
+        verdict = 'REVIEW'
+        note = tr('note.genericReview', { proposed, value: c.value })
+      }
+      break
+    }
   }
 
   // Low-confidence legal value: a clean PASS still needs a human's eye.

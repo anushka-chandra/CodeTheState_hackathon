@@ -17,7 +17,16 @@ function toNum(v: string | number, fallback: number): number {
 }
 
 export default function ComplianceScreen() {
-  const { result, constraints, proposed, updateProposed } = usePlan()
+  const {
+    result,
+    constraints,
+    proposed,
+    activeFootprint,
+    zones,
+    selectedZoneId,
+    cachedExample,
+    updateProposed,
+  } = usePlan()
   const { t, lang } = useI18n()
   const cityBuildings = useCityBuildings()
 
@@ -29,8 +38,9 @@ export default function ComplianceScreen() {
 
   if (!result) return null
 
+  const selectedZone = zones.find((z) => z.id === selectedZoneId)
   const proposedBuilding = {
-    footprint: result.footprint,
+    footprint: activeFootprint ?? result.footprint,
     heightM: toNum(proposed['max_height'] ?? 9, 9),
     roofType: roofTypeFromLabel(proposed['roof_type'] ?? 'unknown'),
     roofPitchDeg: toNum(proposed['roof_pitch'] ?? 38, 38),
@@ -45,13 +55,26 @@ export default function ComplianceScreen() {
       {/* LEFT — 3D viewer slot (~65%) */}
       <section className="sheet flex min-h-[420px] flex-col lg:min-h-[70vh]">
         <div className="flex items-center justify-between border-b border-ink px-4 py-3">
-          <div>
+          <div className="min-w-0">
             <span className="eyebrow">{t('compliance.view')}</span>
-            <h2 className="mt-1 font-display text-base font-bold uppercase tracking-[0.1em]">
-              {result.plan.municipality}
+            <h2 className="mt-1 truncate font-display text-base font-bold uppercase tracking-[0.1em]">
+              {result.plan.name || result.plan.municipality}
             </h2>
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              {selectedZone && zones.length > 1 && (
+                <span className="border border-survey-teal/50 bg-survey-teal/8 px-1.5 py-0.5 font-display text-[0.55rem] uppercase tracking-[0.12em] text-survey-teal">
+                  {t('compliance.zoneLabel')} · {selectedZone.name}
+                </span>
+              )}
+              {cachedExample && (
+                <span className="inline-flex items-center gap-1 border border-seal-amber bg-seal-amber/10 px-1.5 py-0.5 font-display text-[0.55rem] uppercase tracking-[0.12em] text-seal-amber">
+                  <span className="h-1.5 w-1.5 bg-current" aria-hidden />
+                  {t('review.cachedNotice')}
+                </span>
+              )}
+            </div>
           </div>
-          <div className="flex items-center gap-3 font-mono text-[0.6rem] text-ink/55">
+          <div className="flex shrink-0 items-center gap-3 font-mono text-[0.6rem] text-ink/55">
             <Legend color="#C2362B" label={t('compliance.legendProposed')} />
             <Legend color="#8d8d8d" label={t('compliance.legendExisting')} />
           </div>

@@ -1,0 +1,15 @@
+{
+  "name": "planraum-api",
+  "private": true,
+  "type": "module",
+  "description": "PLANRAUM Vercel serverless functions (extraction). The frontend app lives in frontend/.",
+  "dependencies": {
+    "openai": "^4.77.0"
+  },
+  "devDependencies": {
+    "@vercel/node": "^3.2.24",
+    "@types/geojson": "^7946.0.16",
+    "@types/node": "^22.10.5",
+    "typescript": "^5.7.2"
+  }
+}

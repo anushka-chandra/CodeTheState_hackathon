@@ -155,6 +155,15 @@ export const TRANSLATIONS: Record<string, Entry> = {
     en: 'Mark as confirmed',
     de: 'Als bestätigt markieren',
   },
+  'review.cachedNotice': {
+    en: 'showing cached example',
+    de: 'zwischengespeichertes Beispiel',
+  },
+  'review.zonePick': {
+    en: 'Multiple zones found — pick one to review',
+    de: 'Mehrere Zonen gefunden — eine zum Prüfen wählen',
+  },
+  'review.zone': { en: 'Zone', de: 'Zone' },
 
   // ── Plan viewer (source-region pane) ─────────────────────────────────────
   'planViewer.regionsOne': {
@@ -200,6 +209,7 @@ export const TRANSLATIONS: Record<string, Entry> = {
     en: 'Edit any proposed value to re-check instantly. The 3D candidate updates live with height and roof type.',
     de: 'Ändern Sie einen geplanten Wert für eine sofortige Neuprüfung. Der 3D-Entwurf aktualisiert sich live mit Höhe und Dachform.',
   },
+  'compliance.zoneLabel': { en: 'Zone', de: 'Zone' },
 
   // ── Confidence chip ──────────────────────────────────────────────────────
   'confidence.high': { en: 'High', de: 'Hoch' },
@@ -323,6 +333,14 @@ export const TRANSLATIONS: Record<string, Entry> = {
   'note.lowConfidence': {
     en: 'source value low-confidence — verify {label} against plan',
     de: 'Quellwert geringe Konfidenz — {label} gegen Plan prüfen',
+  },
+  'note.genericMatch': {
+    en: 'matches plan value {value}',
+    de: 'entspricht Planwert {value}',
+  },
+  'note.genericReview': {
+    en: 'proposed {proposed} vs plan {value} — manual check',
+    de: 'geplant {proposed} vs. Plan {value} — manuelle Prüfung',
   },
 }
 
