@@ -1,13 +1,17 @@
+import { useI18n } from '../i18n/I18nContext'
+import LanguageSwitcher from './LanguageSwitcher'
+
 /**
  * The application title block — styled like the stamped header of a German
  * technical plan drawing (Planköpfe). Tiny uppercase eyebrow fields with
  * monospaced values beneath, a hard double-rule, and the product wordmark.
  */
 export default function TitleBlock() {
+  const { t } = useI18n()
   return (
     <header className="border-b border-ink bg-white">
       <div className="mx-auto flex max-w-[1400px] flex-wrap items-end justify-between gap-x-8 gap-y-3 px-4 py-3 sm:px-6">
-        {/* Wordmark */}
+        {/* Wordmark + language switch */}
         <div className="flex items-end gap-3">
           <div
             className="flex h-9 w-9 shrink-0 items-center justify-center border border-ink"
@@ -28,17 +32,18 @@ export default function TitleBlock() {
               Planraum
             </h1>
             <p className="mt-1 font-body text-[0.7rem] text-ink/60">
-              AI Bebauungsplan Reader &amp; 3D Compliance Viewer
+              {t('app.tagline')}
             </p>
           </div>
+          <LanguageSwitcher />
         </div>
 
         {/* Title-block fields */}
         <dl className="hidden items-end gap-8 md:flex">
-          <Field label="Sheet" value="B-PLAN / 01" />
-          <Field label="Standard" value="BauNVO · LOD2" />
-          <Field label="CRS" value="EPSG:25832" />
-          <Field label="Status" value="DRAFT" />
+          <Field label={t('title.sheet')} value="B-PLAN / 01" />
+          <Field label={t('title.standard')} value="BauNVO · LOD2" />
+          <Field label={t('title.crs')} value="EPSG:25832" />
+          <Field label={t('title.status')} value={t('title.statusValue')} />
         </dl>
       </div>
     </header>

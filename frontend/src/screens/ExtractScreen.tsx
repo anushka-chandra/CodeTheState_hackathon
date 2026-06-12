@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { usePlan } from '../state/PlanContext'
+import { useI18n } from '../i18n/I18nContext'
 import { EXTRACT_STAGES, runExtraction } from '../data/runExtraction'
 
 interface ExtractScreenProps {
@@ -12,6 +13,7 @@ type StageStatus = 'pending' | 'active' | 'done'
 
 export default function ExtractScreen({ onDone, onAbort }: ExtractScreenProps) {
   const { file, loadResult } = usePlan()
+  const { t } = useI18n()
   // -1 = not started; index of the currently active stage otherwise.
   const [active, setActive] = useState(-1)
   const [failed, setFailed] = useState(false)
@@ -59,13 +61,13 @@ export default function ExtractScreen({ onDone, onAbort }: ExtractScreenProps) {
     <div className="mx-auto max-w-2xl">
       <section className="sheet">
         <div className="border-b border-ink px-5 py-4">
-          <span className="eyebrow">Step 02 — Extraction</span>
+          <span className="eyebrow">{t('extract.eyebrow')}</span>
           <h2 className="mt-1 font-display text-lg font-bold uppercase tracking-[0.1em]">
             {failed
-              ? 'Extraction stalled'
+              ? t('extract.stalled')
               : done
-                ? 'Plan read complete'
-                : 'AI is reading the plan'}
+                ? t('extract.complete')
+                : t('extract.reading')}
           </h2>
           {file && (
             <p className="mt-1 truncate font-mono text-[0.7rem] text-ink/50">
@@ -77,15 +79,14 @@ export default function ExtractScreen({ onDone, onAbort }: ExtractScreenProps) {
         {failed ? (
           <div className="flex flex-col items-center gap-4 p-10 text-center">
             <p className="max-w-sm font-body text-sm text-ink/70">
-              Couldn't read the document — try a PDF export instead of a scan, or
-              use the bundled example to continue the demo.
+              {t('extract.failBody')}
             </p>
             <button
               type="button"
               onClick={onAbort}
               className="border border-ink bg-survey-teal px-5 py-2.5 font-display text-[0.7rem] uppercase tracking-[0.16em] text-white transition-colors hover:bg-ink"
             >
-              ← Back to upload
+              ← {t('extract.backToUpload')}
             </button>
           </div>
         ) : (
@@ -111,14 +112,14 @@ export default function ExtractScreen({ onDone, onAbort }: ExtractScreenProps) {
                           : 'text-ink/35',
                     ].join(' ')}
                   >
-                    {stage.label}
+                    {t(`stage.${stage.key}`)}
                   </span>
                   <span className="font-mono text-[0.6rem] uppercase tracking-[0.12em] text-ink/40">
                     {status === 'done'
-                      ? 'done'
+                      ? t('extract.stageDone')
                       : status === 'active'
-                        ? 'reading…'
-                        : 'queued'}
+                        ? t('extract.stageReading')
+                        : t('extract.stageQueued')}
                   </span>
                 </li>
               )
@@ -137,8 +138,9 @@ export default function ExtractScreen({ onDone, onAbort }: ExtractScreenProps) {
       </section>
 
       <p className="mt-3 text-center font-body text-[0.7rem] text-ink/40">
-        Simulated locally · the backend later replaces a single{' '}
-        <span className="font-mono">runExtraction()</span> call.
+        {t('extract.footPre')}
+        <span className="font-mono">runExtraction()</span>
+        {t('extract.footPost')}
       </p>
     </div>
   )

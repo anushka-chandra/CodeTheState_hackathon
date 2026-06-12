@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import { usePlan } from '../state/PlanContext'
+import { useI18n } from '../i18n/I18nContext'
 import { evaluateCompliance, summarise } from '../data/compliance'
 import { roofTypeFromLabel } from '../data/roof'
 import { useCityBuildings } from '../data/useCityBuildings'
@@ -17,11 +18,12 @@ function toNum(v: string | number, fallback: number): number {
 
 export default function ComplianceScreen() {
   const { result, constraints, proposed, updateProposed } = usePlan()
+  const { t, lang } = useI18n()
   const cityBuildings = useCityBuildings()
 
   const rows = useMemo(
-    () => evaluateCompliance(constraints, proposed),
-    [constraints, proposed],
+    () => evaluateCompliance(constraints, proposed, lang),
+    [constraints, proposed, lang],
   )
   const summary = useMemo(() => summarise(rows), [rows])
 
@@ -44,14 +46,14 @@ export default function ComplianceScreen() {
       <section className="sheet flex min-h-[420px] flex-col lg:min-h-[70vh]">
         <div className="flex items-center justify-between border-b border-ink px-4 py-3">
           <div>
-            <span className="eyebrow">3D compliance view</span>
+            <span className="eyebrow">{t('compliance.view')}</span>
             <h2 className="mt-1 font-display text-base font-bold uppercase tracking-[0.1em]">
               {result.plan.municipality}
             </h2>
           </div>
           <div className="flex items-center gap-3 font-mono text-[0.6rem] text-ink/55">
-            <Legend color="#C2362B" label="Proposed" />
-            <Legend color="#8d8d8d" label="Existing" />
+            <Legend color="#C2362B" label={t('compliance.legendProposed')} />
+            <Legend color="#8d8d8d" label={t('compliance.legendExisting')} />
           </div>
         </div>
         <div className="flex-1">
@@ -62,8 +64,9 @@ export default function ComplianceScreen() {
           />
         </div>
         <div className="border-t border-grid-line px-4 py-2 font-mono text-[0.6rem] text-ink/45">
-          centroid {result.plan.centroidWGS84.lon.toFixed(4)},{' '}
-          {result.plan.centroidWGS84.lat.toFixed(4)} · source {result.plan.crs}
+          {t('compliance.centroidWord')} {result.plan.centroidWGS84.lon.toFixed(4)},{' '}
+          {result.plan.centroidWGS84.lat.toFixed(4)} · {t('compliance.sourceWord')}{' '}
+          {result.plan.crs}
         </div>
       </section>
 
@@ -71,9 +74,9 @@ export default function ComplianceScreen() {
       <section className="sheet flex flex-col">
         <div className="flex items-center justify-between border-b border-ink px-4 py-3">
           <div>
-            <span className="eyebrow">Compliance report</span>
+            <span className="eyebrow">{t('compliance.report')}</span>
             <h2 className="mt-1 font-display text-base font-bold uppercase tracking-[0.1em]">
-              BauNVO check
+              {t('compliance.baunvo')}
             </h2>
           </div>
           <button
@@ -81,7 +84,7 @@ export default function ComplianceScreen() {
             onClick={() => window.print()}
             className="border border-ink bg-white px-3 py-1.5 font-display text-[0.6rem] uppercase tracking-[0.14em] text-ink transition-colors hover:bg-plan-paper"
           >
-            Export report
+            {t('compliance.export')}
           </button>
         </div>
 
@@ -107,10 +110,18 @@ export default function ComplianceScreen() {
         >
           <span className="font-display text-[0.7rem] font-bold uppercase tracking-[0.14em]">
             {summary.fail > 0
-              ? `${summary.fail} of ${summary.total} constraints violated`
+              ? t('compliance.violated', {
+                  fail: summary.fail,
+                  total: summary.total,
+                })
               : summary.review > 0
-                ? `${summary.review} constraint${summary.review === 1 ? '' : 's'} need review`
-                : 'All constraints satisfied'}
+                ? t(
+                    summary.review === 1
+                      ? 'compliance.needReviewOne'
+                      : 'compliance.needReviewMany',
+                    { n: summary.review },
+                  )
+                : t('compliance.allSatisfied')}
           </span>
           <span className="font-mono text-[0.65rem]">
             {summary.pass}✓ · {summary.review}? · {summary.fail}✗
@@ -126,13 +137,13 @@ export default function ComplianceScreen() {
               row={byKey[c.key]}
               proposed={proposed[c.key] ?? c.value}
               onProposed={(v) => updateProposed(c.key, v)}
+              t={t}
             />
           ))}
         </ul>
 
         <p className="mt-auto border-t border-grid-line px-4 py-3 font-body text-[0.7rem] text-ink/45">
-          Edit any proposed value to re-check instantly. The 3D candidate updates
-          live with height and roof type.
+          {t('compliance.editHint')}
         </p>
       </section>
     </div>
@@ -153,11 +164,13 @@ function ComplianceRowItem({
   row,
   proposed,
   onProposed,
+  t,
 }: {
   constraint: Constraint
   row: ComplianceRow | undefined
   proposed: string | number
   onProposed: (v: string | number) => void
+  t: (key: string, params?: Record<string, string | number>) => string
 }) {
   if (!row) return null
   const isNumber = typeof c.value === 'number' || c.key === 'roof_pitch'
@@ -183,7 +196,7 @@ function ComplianceRowItem({
       <div className="mt-2 grid grid-cols-2 gap-2">
         {/* Allowed (read-only) */}
         <div className="flex flex-col gap-1">
-          <span className="eyebrow">Allowed</span>
+          <span className="eyebrow">{t('compliance.allowed')}</span>
           <div className="flex items-stretch border border-grid-line bg-plan-paper/40">
             <span className="w-full px-2 py-1.5 text-right font-mono text-sm text-ink/70">
               {c.value}
@@ -198,7 +211,7 @@ function ComplianceRowItem({
 
         {/* Proposed (editable) */}
         <div className="flex flex-col gap-1">
-          <span className="eyebrow">Proposed</span>
+          <span className="eyebrow">{t('compliance.proposed')}</span>
           <div
             className={[
               'flex items-stretch border',

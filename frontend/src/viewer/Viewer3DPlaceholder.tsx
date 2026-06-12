@@ -1,4 +1,5 @@
 import { useEffect, useMemo } from 'react'
+import { useI18n } from '../i18n/I18nContext'
 import type { Viewer3DProps } from './Viewer3D.types'
 
 /**
@@ -57,6 +58,7 @@ export default function Viewer3DPlaceholder({
   cityBuildings,
   onReady,
 }: Viewer3DProps) {
+  const { t } = useI18n()
   useEffect(() => {
     onReady?.()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -184,7 +186,7 @@ export default function Viewer3DPlaceholder({
       {/* Top-left: footprint + attribute readout */}
       <div className="absolute left-3 top-3 flex flex-col gap-1.5">
         <span className="font-display text-[0.55rem] uppercase tracking-[0.18em] text-white/45">
-          Proposed building
+          {t('viewer.proposedBuilding')}
         </span>
         <div className="flex items-center gap-2">
           <span
@@ -204,7 +206,9 @@ export default function Viewer3DPlaceholder({
               : 'border-parcel-red text-[#e98d83]',
           ].join(' ')}
         >
-          {proposed.compliant ? 'within limits' : 'exceeds limits'}
+          {proposed.compliant
+            ? t('viewer.withinLimits')
+            : t('viewer.exceedsLimits')}
         </span>
       </div>
 
@@ -214,18 +218,18 @@ export default function Viewer3DPlaceholder({
         <span className="h-2.5 w-2.5 bg-white/30" aria-hidden />
         <span className="font-mono text-[0.6rem] text-white/45">
           {cityCount > 0
-            ? `${cityCount} existing LOD2 buildings`
-            : 'city backdrop not loaded'}
+            ? t('viewer.existingBuildings', { n: cityCount })
+            : t('viewer.backdropMissing')}
         </span>
       </div>
 
       {/* Bottom-right: the "real viewer mounts here" note */}
       <div className="absolute bottom-3 right-3 max-w-[60%] border border-white/15 bg-black/30 px-2.5 py-1.5 text-right backdrop-blur-sm">
         <span className="font-display text-[0.55rem] uppercase tracking-[0.16em] text-white/45">
-          3D viewer slot
+          {t('viewer.slot')}
         </span>
         <p className="font-mono text-[0.6rem] leading-snug text-white/60">
-          MapLibre / Cesium canvas mounts here
+          {t('viewer.slotNote')}
         </p>
       </div>
     </div>

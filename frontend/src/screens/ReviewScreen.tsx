@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { usePlan } from '../state/PlanContext'
+import { useI18n } from '../i18n/I18nContext'
 import ConfidenceChip from '../components/ConfidenceChip'
 import PlanViewer from '../components/PlanViewer'
 import type { Constraint, ConstraintKey } from '../types'
@@ -26,6 +27,7 @@ export default function ReviewScreen({ onContinue }: ReviewScreenProps) {
     updateConstraintValue,
     setConfirmed,
   } = usePlan()
+  const { t } = useI18n()
 
   // Which source region is highlighted, and a tick to re-trigger the flash.
   const [focusedKey, setFocusedKey] = useState<ConstraintKey | null>(null)
@@ -61,7 +63,7 @@ export default function ReviewScreen({ onContinue }: ReviewScreenProps) {
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)]">
       {/* LEFT — plan document with highlighted source regions */}
       <section className="sheet flex min-h-[420px] flex-col lg:min-h-[72vh]">
-        <PaneHeader eyebrow="Source document" title={result.plan.name} />
+        <PaneHeader eyebrow={t('review.source')} title={result.plan.name} />
         {planImageUrl ? (
           <PlanViewer
             imageUrl={planImageUrl}
@@ -87,11 +89,10 @@ export default function ReviewScreen({ onContinue }: ReviewScreenProps) {
                 <line x1="14" y1="26" x2="28" y2="26" className="stroke-current" strokeWidth={1} />
               </svg>
               <p className="font-body text-sm text-ink/55">
-                No page preview for this upload — constraints are still editable
-                on the right.
+                {t('review.noPreview')}
               </p>
               <p className="font-mono text-[0.65rem] text-ink/40">
-                page {result.sourcePage ?? 1} · {result.plan.crs}
+                {t('review.pageWord')} {result.sourcePage ?? 1} · {result.plan.crs}
               </p>
             </div>
           </div>
@@ -101,14 +102,14 @@ export default function ReviewScreen({ onContinue }: ReviewScreenProps) {
       {/* RIGHT — editable constraint sheet */}
       <section className="sheet flex flex-col">
         <PaneHeader
-          eyebrow="Human-in-the-loop · verify constraints"
-          title="Extracted constraints"
+          eyebrow={t('review.humanLoop')}
+          title={t('review.extracted')}
         />
 
         {/* Column header row */}
         <div className="grid grid-cols-[1fr_auto] items-center gap-3 border-b border-ink bg-plan-paper/60 px-4 py-2">
-          <span className="eyebrow">Parameter</span>
-          <span className="eyebrow text-right">Value · Confidence · Confirm</span>
+          <span className="eyebrow">{t('review.colParameter')}</span>
+          <span className="eyebrow text-right">{t('review.colValue')}</span>
         </div>
 
         <ul className="divide-y divide-grid-line">
@@ -124,6 +125,7 @@ export default function ReviewScreen({ onContinue }: ReviewScreenProps) {
               onLocate={() => focusRegion(c.key)}
               onValue={(v) => updateConstraintValue(c.key, v)}
               onConfirm={(v) => setConfirmed(c.key, v)}
+              t={t}
             />
           ))}
         </ul>
@@ -133,16 +135,19 @@ export default function ReviewScreen({ onContinue }: ReviewScreenProps) {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="font-mono text-xs text-ink/60">
               {lowRows.length === 0 ? (
-                <>No low-confidence values flagged.</>
+                <>{t('review.noLow')}</>
               ) : canContinue ? (
                 <span className="text-survey-teal">
-                  ✓ All {lowRows.length} low-confidence values resolved.
+                  {t('review.allResolved', { n: lowRows.length })}
                 </span>
               ) : (
                 <span className="text-parcel-red">
-                  {unresolved.length} low-confidence value
-                  {unresolved.length === 1 ? ' needs' : 's need'} review — edit
-                  or confirm.
+                  {t(
+                    unresolved.length === 1
+                      ? 'review.needReviewOne'
+                      : 'review.needReviewMany',
+                    { n: unresolved.length },
+                  )}
                 </span>
               )}
             </p>
@@ -157,7 +162,7 @@ export default function ReviewScreen({ onContinue }: ReviewScreenProps) {
                   : 'cursor-not-allowed border-grid-line bg-plan-paper text-ink/35',
               ].join(' ')}
             >
-              Confirm all &amp; continue →
+              {t('review.confirmContinue')} →
             </button>
           </div>
         </div>
@@ -187,6 +192,7 @@ function ConstraintRow({
   onLocate,
   onValue,
   onConfirm,
+  t,
 }: {
   constraint: Constraint
   edited: boolean
@@ -197,6 +203,7 @@ function ConstraintRow({
   onLocate: () => void
   onValue: (v: string | number) => void
   onConfirm: (v: boolean) => void
+  t: (key: string, params?: Record<string, string | number>) => string
 }) {
   const needsAttention = c.confidence === 'low' && !resolved
   const isNumber = typeof c.value === 'number'
@@ -214,7 +221,7 @@ function ConstraintRow({
           type="button"
           onClick={onLocate}
           className="group flex flex-col items-start gap-0.5 text-left"
-          title="Locate on plan"
+          title={t('review.locateTitle')}
         >
           <span className="flex items-center gap-1.5 font-body text-sm font-semibold text-ink">
             {c.labelDe}
@@ -292,7 +299,7 @@ function ConstraintRow({
           type="button"
           onClick={() => onConfirm(!confirmed)}
           aria-pressed={confirmed}
-          title={confirmed ? 'Confirmed by reviewer' : 'Mark as confirmed'}
+          title={confirmed ? t('review.confirmedTitle') : t('review.markConfirmed')}
           className={[
             'flex h-7 w-7 items-center justify-center border transition-colors',
             confirmed

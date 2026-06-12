@@ -1,3 +1,4 @@
+import { useI18n } from '../i18n/I18nContext'
 import type { Verdict } from '../types'
 
 /**
@@ -14,6 +15,7 @@ export default function PlanStempel({
   violated: number
   total: number
 }) {
+  const { t } = useI18n()
   const color =
     verdict === 'PASS'
       ? 'var(--color-survey-teal)'
@@ -23,15 +25,15 @@ export default function PlanStempel({
 
   const headline =
     verdict === 'PASS'
-      ? 'Konform'
+      ? t('stempel.passHead')
       : verdict === 'FAIL'
-        ? 'Nicht konform'
-        : 'Prüfung nötig'
+        ? t('stempel.failHead')
+        : t('stempel.reviewHead')
 
   const sub =
     verdict === 'PASS'
-      ? 'All constraints satisfied'
-      : `${violated} of ${total} constraints violated`
+      ? t('stempel.subPass')
+      : t('stempel.subViolated', { violated, total })
 
   return (
     <div className="flex justify-center py-1">
@@ -45,7 +47,7 @@ export default function PlanStempel({
           aria-hidden
         />
         <span className="block font-display text-[0.55rem] font-semibold uppercase tracking-[0.3em] opacity-70">
-          Bebauungsplan · Prüfsiegel
+          {t('stempel.seal')}
         </span>
         <span className="mt-1 block font-display text-2xl font-extrabold uppercase tracking-[0.14em]">
           {headline}

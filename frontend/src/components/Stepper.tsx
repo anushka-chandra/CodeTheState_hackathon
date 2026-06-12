@@ -1,10 +1,12 @@
+import { useI18n } from '../i18n/I18nContext'
+
 export type Step = 'upload' | 'extract' | 'review' | 'compliance'
 
-export const STEPS: { key: Step; label: string; n: string }[] = [
-  { key: 'upload', label: 'Upload', n: '01' },
-  { key: 'extract', label: 'Extract', n: '02' },
-  { key: 'review', label: 'Review', n: '03' },
-  { key: 'compliance', label: '3D & Compliance', n: '04' },
+export const STEPS: { key: Step; n: string }[] = [
+  { key: 'upload', n: '01' },
+  { key: 'extract', n: '02' },
+  { key: 'review', n: '03' },
+  { key: 'compliance', n: '04' },
 ]
 
 interface StepperProps {
@@ -15,6 +17,7 @@ interface StepperProps {
 }
 
 export default function Stepper({ current, reachable, onNavigate }: StepperProps) {
+  const { t } = useI18n()
   const currentIdx = STEPS.findIndex((s) => s.key === current)
 
   return (
@@ -57,7 +60,7 @@ export default function Stepper({ current, reachable, onNavigate }: StepperProps
                       state === 'todo' ? 'opacity-60' : '',
                     ].join(' ')}
                   >
-                    {s.label}
+                    {t(`step.${s.key}`)}
                   </span>
                   <span
                     className={[
@@ -66,10 +69,10 @@ export default function Stepper({ current, reachable, onNavigate }: StepperProps
                     ].join(' ')}
                   >
                     {state === 'done'
-                      ? 'complete'
+                      ? t('step.complete')
                       : state === 'active'
-                        ? 'in progress'
-                        : 'pending'}
+                        ? t('step.inProgress')
+                        : t('step.pending')}
                   </span>
                 </span>
               </button>
@@ -99,7 +102,7 @@ export default function Stepper({ current, reachable, onNavigate }: StepperProps
                 />
                 {state === 'active' && (
                   <span className="font-display text-[0.55rem] uppercase tracking-[0.12em]">
-                    {s.label}
+                    {t(`step.${s.key}`)}
                   </span>
                 )}
               </div>

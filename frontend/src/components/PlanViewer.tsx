@@ -5,6 +5,7 @@ import {
   useRef,
   useState,
 } from 'react'
+import { useI18n } from '../i18n/I18nContext'
 import type { Constraint, ConstraintKey } from '../types'
 
 /** Plan dimensions assumed for fitting (example SVG is 1000×707). The image is
@@ -28,6 +29,7 @@ export default function PlanViewer({
   focusTick,
   onFocus,
 }: PlanViewerProps) {
+  const { t } = useI18n()
   const containerRef = useRef<HTMLDivElement>(null)
   const [scale, setScale] = useState(1)
   const [tx, setTx] = useState(0)
@@ -171,21 +173,33 @@ export default function PlanViewer({
       {/* Zoom controls */}
       <div className="flex items-center justify-between border-t border-grid-line bg-white px-3 py-2">
         <span className="font-mono text-[0.6rem] text-ink/45">
-          {boxes.length} source region{boxes.length === 1 ? '' : 's'} · click a
-          value to locate
+          {t(
+            boxes.length === 1 ? 'planViewer.regionsOne' : 'planViewer.regionsMany',
+            { n: boxes.length },
+          )}
         </span>
         <div className="flex items-center gap-1">
-          <ZoomBtn label="−" onClick={() => zoom(-0.5)} disabled={scale <= 1} />
+          <ZoomBtn
+            label="−"
+            ariaLabel={t('planViewer.zoomOut')}
+            onClick={() => zoom(-0.5)}
+            disabled={scale <= 1}
+          />
           <span className="w-12 text-center font-mono text-[0.65rem] text-ink/60">
             {Math.round(scale * 100)}%
           </span>
-          <ZoomBtn label="+" onClick={() => zoom(0.5)} disabled={scale >= 4} />
+          <ZoomBtn
+            label="+"
+            ariaLabel={t('planViewer.zoomIn')}
+            onClick={() => zoom(0.5)}
+            disabled={scale >= 4}
+          />
           <button
             type="button"
             onClick={reset}
             className="ml-1 border border-ink bg-white px-2 py-1 font-display text-[0.55rem] uppercase tracking-[0.12em] text-ink transition-colors hover:bg-plan-paper"
           >
-            Reset
+            {t('planViewer.reset')}
           </button>
         </div>
       </div>
@@ -195,10 +209,12 @@ export default function PlanViewer({
 
 function ZoomBtn({
   label,
+  ariaLabel,
   onClick,
   disabled,
 }: {
   label: string
+  ariaLabel: string
   onClick: () => void
   disabled?: boolean
 }) {
@@ -213,7 +229,7 @@ function ZoomBtn({
           ? 'cursor-not-allowed border-grid-line text-ink/30'
           : 'border-ink bg-white text-ink hover:bg-plan-paper',
       ].join(' ')}
-      aria-label={label === '+' ? 'Zoom in' : 'Zoom out'}
+      aria-label={ariaLabel}
     >
       {label}
     </button>

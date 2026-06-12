@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { usePlan } from '../state/PlanContext'
+import { useI18n } from '../i18n/I18nContext'
 import { mockExtraction } from '../data/mockExtraction'
 import {
   ACCEPT_ATTR,
@@ -23,6 +24,7 @@ export default function UploadScreen({
   onUseExample,
 }: UploadScreenProps) {
   const { file, setFile, setPlanImageUrl, loadResult } = usePlan()
+  const { t } = useI18n()
   const [dragging, setDragging] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [thumb, setThumb] = useState<string | null>(null)
@@ -45,9 +47,7 @@ export default function UploadScreen({
     async (f: File) => {
       setError(null)
       if (!isAcceptedFile(f)) {
-        setError(
-          `"${f.name}" isn't a supported plan. Use a PDF, PNG, JPG or TIFF export.`,
-        )
+        setError(t('upload.unsupported', { name: f.name }))
         return
       }
       setFile(f)
@@ -80,7 +80,7 @@ export default function UploadScreen({
         setPlanImageUrl(url)
       }
     },
-    [revokeObjectUrl, setFile, setPlanImageUrl],
+    [revokeObjectUrl, setFile, setPlanImageUrl, t],
   )
 
   const onDrop = useCallback(
@@ -105,9 +105,9 @@ export default function UploadScreen({
       {/* Drop zone */}
       <section className="sheet flex flex-col">
         <div className="border-b border-ink px-4 py-3">
-          <span className="eyebrow">Step 01 — Upload Bebauungsplan</span>
+          <span className="eyebrow">{t('upload.eyebrow')}</span>
           <h2 className="mt-1 font-display text-base font-bold uppercase tracking-[0.1em]">
-            Add a plan to read
+            {t('upload.title')}
           </h2>
         </div>
 
@@ -115,7 +115,7 @@ export default function UploadScreen({
           <div
             role="button"
             tabIndex={0}
-            aria-label="Drop a plan file here or click to browse"
+            aria-label={t('upload.dropAria')}
             onClick={() => inputRef.current?.click()}
             onKeyDown={(e) => {
               if (e.key === 'Enter' || e.key === ' ') {
@@ -158,10 +158,10 @@ export default function UploadScreen({
             </svg>
             <div>
               <p className="font-display text-sm font-semibold uppercase tracking-[0.12em] text-ink">
-                Drop plan here
+                {t('upload.dropTitle')}
               </p>
               <p className="mt-1 font-body text-xs text-ink/55">
-                or click to browse · PDF, PNG, JPG, TIFF
+                {t('upload.dropHint')}
               </p>
             </div>
 
@@ -188,15 +188,13 @@ export default function UploadScreen({
           )}
 
           <div className="mt-4 flex items-center justify-between border-t border-grid-line pt-3">
-            <p className="font-body text-xs text-ink/50">
-              No plan handy? Walk the demo with a real Bühl-style sheet.
-            </p>
+            <p className="font-body text-xs text-ink/50">{t('upload.noPlan')}</p>
             <button
               type="button"
               onClick={useExample}
               className="font-display text-[0.65rem] uppercase tracking-[0.14em] text-survey-teal underline decoration-survey-teal/40 underline-offset-4 hover:decoration-survey-teal"
             >
-              Use example plan →
+              {t('upload.useExample')} →
             </button>
           </div>
         </div>
@@ -205,9 +203,9 @@ export default function UploadScreen({
       {/* File card */}
       <section className="sheet flex flex-col">
         <div className="border-b border-ink px-4 py-3">
-          <span className="eyebrow">Staged document</span>
+          <span className="eyebrow">{t('upload.staged')}</span>
           <h2 className="mt-1 font-display text-base font-bold uppercase tracking-[0.1em]">
-            {file ? 'Ready to read' : 'Nothing staged'}
+            {file ? t('upload.readyToRead') : t('upload.nothingStaged')}
           </h2>
         </div>
 
@@ -215,7 +213,7 @@ export default function UploadScreen({
           <div className="flex flex-1 flex-col items-center justify-center gap-2 p-8 text-center">
             <div className="h-16 w-12 border border-dashed border-grid-line" aria-hidden />
             <p className="font-body text-xs text-ink/45">
-              Your uploaded plan will preview here.
+              {t('upload.previewHere')}
             </p>
           </div>
         ) : (
@@ -225,12 +223,12 @@ export default function UploadScreen({
               <div className="flex h-32 w-24 shrink-0 items-center justify-center overflow-hidden border border-ink bg-plan-paper">
                 {thumbState === 'loading' ? (
                   <span className="font-mono text-[0.6rem] text-ink/45">
-                    rendering…
+                    {t('upload.rendering')}
                   </span>
                 ) : thumb ? (
                   <img
                     src={thumb}
-                    alt={`Preview of ${file.name}`}
+                    alt={t('upload.previewAlt', { name: file.name })}
                     className="h-full w-full object-cover object-top"
                     onError={() => {
                       setThumb(null)
@@ -244,16 +242,16 @@ export default function UploadScreen({
 
               {/* Meta */}
               <dl className="flex min-w-0 flex-col gap-2">
-                <Meta label="Filename" value={file.name} mono break />
-                <Meta label="Size" value={formatBytes(file.size)} mono />
+                <Meta label={t('upload.metaFilename')} value={file.name} mono break />
+                <Meta label={t('upload.metaSize')} value={formatBytes(file.size)} mono />
                 <Meta
-                  label="Plan no."
-                  value={planNumber ?? 'not detected'}
+                  label={t('upload.metaPlanNo')}
+                  value={planNumber ?? t('upload.notDetected')}
                   mono
                   muted={!planNumber}
                 />
                 <Meta
-                  label="Type"
+                  label={t('upload.metaType')}
                   value={(file.name.split('.').pop() ?? '').toUpperCase()}
                   mono
                 />
@@ -272,14 +270,14 @@ export default function UploadScreen({
                 }}
                 className="border border-ink bg-white px-3 py-2 font-display text-[0.62rem] uppercase tracking-[0.14em] text-ink transition-colors hover:bg-plan-paper"
               >
-                Remove
+                {t('upload.remove')}
               </button>
               <button
                 type="button"
                 onClick={onExtract}
                 className="border border-ink bg-survey-teal px-5 py-2 font-display text-[0.65rem] uppercase tracking-[0.14em] text-white transition-colors hover:bg-ink"
               >
-                Read this plan →
+                {t('upload.readThis')} →
               </button>
             </div>
           </div>

@@ -1,9 +1,12 @@
 import type { Constraint, ComplianceRow, Verdict } from '../types'
+import { translate, type Lang } from '../i18n/translations'
 
 /**
  * Pure compliance engine. Given the human-reviewed constraints (the legal
  * "allowed" values) and the planner's proposed "what-if" values, produce one
  * verdict row per parameter. No React, no side effects — re-run on every edit.
+ *
+ * Notes are localised via `lang` (defaults to English).
  *
  * A constraint whose source confidence is 'low' is downgraded PASS→REVIEW: the
  * building may fit, but the legal value itself wasn't read reliably and a human
@@ -35,8 +38,14 @@ function fmt(v: string | number, unit?: string): string {
   return `${v}${u}`
 }
 
-function evaluateRow(c: Constraint, proposed: string | number): ComplianceRow {
+function evaluateRow(
+  c: Constraint,
+  proposed: string | number,
+  lang: Lang,
+): ComplianceRow {
   const unit = c.unit ?? ''
+  const tr = (key: string, params?: Record<string, string | number>) =>
+    translate(lang, key, params)
   let verdict: Verdict = 'PASS'
   let note: string | undefined
 
@@ -48,17 +57,23 @@ function evaluateRow(c: Constraint, proposed: string | number): ComplianceRow {
       const prop = num(proposed)
       if (allowed === null || prop === null) {
         verdict = 'REVIEW'
-        note = 'Value not numeric — verify manually.'
+        note = tr('note.notNumeric')
         break
       }
       if (prop > allowed) {
         verdict = 'FAIL'
         const delta = +(prop - allowed).toFixed(2)
-        note = `exceeds allowed ${fmt(allowed, unit)} by ${fmt(delta, unit)}`
+        note = tr('note.exceeds', {
+          allowed: fmt(allowed, unit),
+          delta: fmt(delta, unit),
+        })
       } else {
         verdict = 'PASS'
         const head = +(allowed - prop).toFixed(2)
-        note = head > 0 ? `${fmt(head, unit)} headroom below limit` : 'at limit'
+        note =
+          head > 0
+            ? tr('note.headroom', { head: fmt(head, unit) })
+            : tr('note.atLimit')
       }
       break
     }
@@ -68,18 +83,24 @@ function evaluateRow(c: Constraint, proposed: string | number): ComplianceRow {
       const prop = num(proposed)
       if (!range || prop === null) {
         verdict = 'REVIEW'
-        note = 'Pitch not comparable — verify manually.'
+        note = tr('note.pitchNotComparable')
         break
       }
       if (prop < range.min) {
         verdict = 'FAIL'
-        note = `below minimum ${range.min}° by ${+(range.min - prop).toFixed(1)}°`
+        note = tr('note.belowMin', {
+          min: range.min,
+          by: +(range.min - prop).toFixed(1),
+        })
       } else if (prop > range.max) {
         verdict = 'FAIL'
-        note = `above maximum ${range.max}° by ${+(prop - range.max).toFixed(1)}°`
+        note = tr('note.aboveMax', {
+          max: range.max,
+          by: +(prop - range.max).toFixed(1),
+        })
       } else {
         verdict = 'PASS'
-        note = `within ${range.min}–${range.max}°`
+        note = tr('note.within', { min: range.min, max: range.max })
       }
       break
     }
@@ -89,10 +110,10 @@ function evaluateRow(c: Constraint, proposed: string | number): ComplianceRow {
       const p = String(proposed).trim().toLowerCase()
       if (a === p) {
         verdict = 'PASS'
-        note = `matches required ${c.value}`
+        note = tr('note.roofMatches', { value: c.value })
       } else {
         verdict = 'FAIL'
-        note = `proposed ${proposed} ≠ required ${c.value}`
+        note = tr('note.roofMismatch', { proposed, value: c.value })
       }
       break
     }
@@ -102,10 +123,10 @@ function evaluateRow(c: Constraint, proposed: string | number): ComplianceRow {
       const p = String(proposed).trim().toLowerCase()
       if (a === p) {
         verdict = 'PASS'
-        note = `matches permitted ${c.value} storeys`
+        note = tr('note.floorsMatch', { value: c.value })
       } else {
         verdict = 'REVIEW'
-        note = `proposed ${proposed} vs permitted ${c.value} — manual check`
+        note = tr('note.floorsReview', { proposed, value: c.value })
       }
       break
     }
@@ -114,7 +135,9 @@ function evaluateRow(c: Constraint, proposed: string | number): ComplianceRow {
   // Low-confidence legal value: a clean PASS still needs a human's eye.
   if (verdict === 'PASS' && c.confidence === 'low') {
     verdict = 'REVIEW'
-    note = `source value low-confidence — verify ${c.labelDe} against plan`
+    note = tr('note.lowConfidence', {
+      label: lang === 'de' ? c.labelDe : c.labelEn,
+    })
   }
 
   return { key: c.key, allowed: c.value, proposed, verdict, note }
@@ -123,9 +146,10 @@ function evaluateRow(c: Constraint, proposed: string | number): ComplianceRow {
 export function evaluateCompliance(
   constraints: Constraint[],
   proposed: Record<string, string | number>,
+  lang: Lang = 'en',
 ): ComplianceRow[] {
   return constraints.map((c) =>
-    evaluateRow(c, proposed[c.key] ?? c.value),
+    evaluateRow(c, proposed[c.key] ?? c.value, lang),
   )
 }
 

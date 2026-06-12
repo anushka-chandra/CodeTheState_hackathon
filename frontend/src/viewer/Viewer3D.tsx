@@ -1,4 +1,5 @@
 import { lazy, Suspense, useState } from 'react'
+import { useI18n } from '../i18n/I18nContext'
 import type { Viewer3DProps } from './Viewer3D.types'
 import Viewer3DPlaceholder from './Viewer3DPlaceholder'
 
@@ -14,6 +15,7 @@ type Mode = 'map' | 'schematic'
  * the schematic is the guaranteed-safe demo path.
  */
 export default function Viewer3D(props: Viewer3DProps) {
+  const { t } = useI18n()
   const [mode, setMode] = useState<Mode>('map')
   const [mapFailed, setMapFailed] = useState(false)
 
@@ -22,7 +24,7 @@ export default function Viewer3D(props: Viewer3DProps) {
   return (
     <div className="relative h-full w-full">
       {showMap ? (
-        <Suspense fallback={<ViewerLoading />}>
+        <Suspense fallback={<ViewerLoading t={t} />}>
           <MapLibreViewer
             {...props}
             onError={() => {
@@ -44,18 +46,18 @@ export default function Viewer3D(props: Viewer3DProps) {
             setMapFailed(false)
             setMode('map')
           }}
-          label="3D Map"
+          label={t('viewer.modeMap')}
         />
         <ModeButton
           active={!showMap}
           onClick={() => setMode('schematic')}
-          label="Schematic"
+          label={t('viewer.modeSchematic')}
         />
       </div>
 
       {mapFailed && (
         <p className="absolute bottom-12 right-3 z-10 max-w-[55%] border border-seal-amber/50 bg-black/50 px-2 py-1 text-right font-mono text-[0.55rem] text-seal-amber backdrop-blur-sm">
-          Map unavailable — showing schematic.
+          {t('viewer.mapUnavailable')}
         </p>
       )}
     </div>
@@ -92,11 +94,15 @@ function ModeButton({
   )
 }
 
-function ViewerLoading() {
+function ViewerLoading({
+  t,
+}: {
+  t: (key: string, params?: Record<string, string | number>) => string
+}) {
   return (
     <div className="flex h-full w-full items-center justify-center bg-[#15171A]">
       <span className="font-mono text-[0.65rem] text-white/45">
-        loading 3D map…
+        {t('viewer.loading')}
       </span>
     </div>
   )
