@@ -173,10 +173,17 @@ function normaliseConstraint(raw: any): Constraint | null {
   }
 }
 
-function defaultFootprint(center: { lon: number; lat: number }) {
-  // ~25m x 18m — realistic single-family house plot, visible next to real LOD2 buildings
-  const hw = 0.00018
-  const hh = 0.000082
+/** Build a rectangular footprint from GRZ × assumed plot area (600 sqm). */
+function defaultFootprint(center: { lon: number; lat: number }, grz = 0.4) {
+  const PLOT_AREA = 600 // sqm — typical German residential plot
+  const buildingArea = Math.max(grz, 0.05) * PLOT_AREA
+  const aspect = 1.3 // width / depth
+  const widthM = Math.sqrt(buildingArea * aspect)
+  const depthM = buildingArea / widthM
+  const mPerDegLon = 111320 * Math.cos((center.lat * Math.PI) / 180)
+  const mPerDegLat = 110540
+  const hw = (widthM / 2) / mPerDegLon
+  const hh = (depthM / 2) / mPerDegLat
   return {
     type: 'Polygon' as const,
     coordinates: [
@@ -198,10 +205,6 @@ function normalise(raw: any): ExtractionResult {
     Number.isFinite(raw.plan.centroidWGS84.lat)
       ? { lon: raw.plan.centroidWGS84.lon, lat: raw.plan.centroidWGS84.lat }
       : DEFAULT_CENTER
-
-  const footprint = raw?.footprint?.coordinates
-    ? raw.footprint
-    : defaultFootprint(center)
 
   // Zones: from model, else wrap top-level constraints into one zone.
   let rawZones: any[] = Array.isArray(raw?.zones) ? raw.zones : []
@@ -232,6 +235,13 @@ function normalise(raw: any): ExtractionResult {
     // Nothing usable extracted — treat as a failure so the caller falls back.
     throw new Error('No constraints extracted')
   }
+
+  // Derive initial footprint from extracted GRZ (if available).
+  const grzConstraint = zones[0].constraints.find((c) => c.key === 'grz')
+  const grzVal = typeof grzConstraint?.value === 'number' ? grzConstraint.value : 0.4
+  const footprint = raw?.footprint?.coordinates
+    ? raw.footprint
+    : defaultFootprint(center, grzVal)
 
   return {
     plan: {

@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import type { Polygon } from 'geojson'
 import { usePlan } from '../state/PlanContext'
 import { useI18n } from '../i18n/I18nContext'
 import { evaluateCompliance, summarise } from '../data/compliance'
@@ -36,12 +37,47 @@ export default function ComplianceScreen() {
   )
   const summary = useMemo(() => summarise(rows), [rows])
 
+  const grz = toNum(proposed['grz'] ?? 0.4, 0.4)
+  const gfz = toNum(proposed['gfz'] ?? 0.8, 0.8)
+  const floors = toNum(proposed['floors'] ?? 2, 2)
+  const maxHeight = toNum(proposed['max_height'] ?? 9, 9)
+
+  // Derive building footprint from GRZ: building area = GRZ × plot area.
+  // Assume a typical German residential plot (~600 sqm).
+  const PLOT_AREA = 600
+  const liveFootprint = useMemo(() => {
+    const center = result?.plan.centroidWGS84
+    if (!center) return null
+    const buildingArea = Math.max(grz, 0.05) * PLOT_AREA // sqm
+    const aspect = 1.3 // width / depth
+    const widthM = Math.sqrt(buildingArea * aspect)
+    const depthM = buildingArea / widthM
+    // Convert metres to degrees at centroid
+    const mPerDegLon = 111320 * Math.cos((center.lat * Math.PI) / 180)
+    const mPerDegLat = 110540
+    const hw = (widthM / 2) / mPerDegLon
+    const hh = (depthM / 2) / mPerDegLat
+    return {
+      type: 'Polygon' as const,
+      coordinates: [[
+        [center.lon - hw, center.lat - hh],
+        [center.lon + hw, center.lat - hh],
+        [center.lon + hw, center.lat + hh],
+        [center.lon - hw, center.lat + hh],
+        [center.lon - hw, center.lat - hh],
+      ]],
+    } satisfies Polygon
+  }, [result?.plan.centroidWGS84, grz])
+
+  // Height: use max_height directly, or estimate from floors × 3m if max_height not set.
+  const heightM = maxHeight > 0 ? maxHeight : Math.max(floors * 3, 3)
+
   if (!result) return null
 
   const selectedZone = zones.find((z) => z.id === selectedZoneId)
   const proposedBuilding = {
-    footprint: activeFootprint ?? result.footprint,
-    heightM: toNum(proposed['max_height'] ?? 9, 9),
+    footprint: liveFootprint ?? activeFootprint ?? result.footprint,
+    heightM,
     roofType: roofTypeFromLabel(proposed['roof_type'] ?? 'unknown'),
     roofPitchDeg: toNum(proposed['roof_pitch'] ?? 38, 38),
     compliant: summary.fail === 0,
