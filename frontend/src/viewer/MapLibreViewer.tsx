@@ -24,7 +24,7 @@ const mapStyle: string | maplibreStyle = MAPBOX_TOKEN
       },
       layers: [{ id: 'base', type: 'raster' as const, source: 'mapbox-base' }],
     }
-  : 'https://tiles.openfreemap.org/styles/positron'
+  : 'https://tiles.openfreemap.org/styles/liberty'
 
 type maplibreStyle = {
   version: 8
@@ -191,7 +191,7 @@ export default function MapLibreViewer({
               'fill-extrusion-color': wallColor(proposed?.compliant ?? true),
               'fill-extrusion-height': ['to-number', ['get', 'height'], 0],
               'fill-extrusion-base': ['to-number', ['get', 'base'], 0],
-              'fill-extrusion-opacity': 0.92,
+              'fill-extrusion-opacity': 1,
             },
           })
           map.addLayer({
@@ -203,7 +203,7 @@ export default function MapLibreViewer({
               'fill-extrusion-color': roofColor(proposed?.compliant ?? true),
               'fill-extrusion-height': ['to-number', ['get', 'height'], 0],
               'fill-extrusion-base': ['to-number', ['get', 'base'], 0],
-              'fill-extrusion-opacity': 0.92,
+              'fill-extrusion-opacity': 1,
             },
           })
 
@@ -225,6 +225,35 @@ export default function MapLibreViewer({
               },
             })
           }
+
+          // ── Cosmetics (each guarded so a failure can never blank the map) ──
+          try {
+            // Hide the basemap's own buildings (vector source-layer 'building')
+            // so they don't clash with our extrusions. This matches ONLY the
+            // basemap's vector layers — our GeoJSON building layer has no
+            // source-layer, so it can never be hidden.
+            for (const l of map.getStyle().layers) {
+              if ((l as { 'source-layer'?: string })['source-layer'] === 'building') {
+                map.setLayoutProperty(l.id, 'visibility', 'none')
+              }
+            }
+          } catch { /* no building layer in style — fine */ }
+
+          try {
+            map.setSky({
+              'sky-color': '#b9d4e8', 'sky-horizon-blend': 0.6,
+              'horizon-color': '#eef3f6', 'horizon-fog-blend': 0.5,
+              'fog-color': '#f3f1ec', 'fog-ground-blend': 0.7, 'atmosphere-blend': 0.8,
+            })
+          } catch { /* sky unsupported — skip */ }
+
+          try {
+            map.setLight({ anchor: 'viewport', color: '#fff7ec', intensity: 0.55, position: [1.5, 120, 70] })
+          } catch { /* light unsupported — skip */ }
+
+          try {
+            map.easeTo({ zoom: 17.8, pitch: 55, bearing: -18, duration: 1200 })
+          } catch { /* ignore */ }
 
           setMapReady(true)
           onReady?.()
