@@ -2,6 +2,7 @@ import type { Polygon } from 'geojson'
 import type { ExtractionResult, PlanZone, Constraint } from '../types'
 import { buildProposedFeatures } from '../viewer/buildingGeometry'
 import { roofTypeFromLabel } from './roof'
+import { toEPSG25832 } from './useCityBuildings'
 
 /** Trigger a browser download of a string as a file. */
 function download(content: string, filename: string, mime: string) {
@@ -33,6 +34,8 @@ export function exportGeoJSON(
   result: ExtractionResult,
   proposed: Record<string, string | number>,
   activeFootprint: Polygon,
+  baseElevationM = 0,
+  rotationDeg = 0,
 ) {
   const zones = result.zones ?? [{ id: 'zone-1', name: 'Plangebiet', constraints: result.constraints, footprint: result.footprint }]
 
@@ -45,7 +48,7 @@ export function exportGeoJSON(
     const pitchDeg = toNum(getConstraintValue(zone.constraints, 'roof_pitch') ?? proposed['roof_pitch'], 35)
     const footprint = zone.footprint ?? activeFootprint
 
-    const fc = buildProposedFeatures(footprint, heightM, roofType, pitchDeg, true)
+    const fc = buildProposedFeatures(footprint, heightM, roofType, pitchDeg, true, rotationDeg)
 
     for (const f of fc.features) {
       allFeatures.push({
@@ -64,6 +67,7 @@ export function exportGeoJSON(
           grz: toNum(getConstraintValue(zone.constraints, 'grz'), 0),
           gfz: toNum(getConstraintValue(zone.constraints, 'gfz'), 0),
           floors: toNum(getConstraintValue(zone.constraints, 'floors'), 0),
+          base_elevation: baseElevationM,
         },
       })
     }
@@ -79,36 +83,39 @@ export function exportGeoJSON(
 }
 
 /**
- * Export as OGC Simple Features GML 3.2 — GDAL/OGR reads geometry correctly.
+ * Export as OGC Simple Features GML 3.2 in EPSG:25832 — matches LGL LOD2 tiles.
  * Produces a gml:FeatureCollection with one Building featureMember per zone,
  * each carrying a gml:MultiSurface (ground + walls + roof) and flat attributes.
- * Uses CRS84 (lon,lat order) to avoid OGR's EPSG:4326 axis swap.
+ * Coordinates are easting/northing/NHN so the building sits at the correct
+ * absolute elevation next to official LOD2 data.
  */
 export function exportCityGML(
   result: ExtractionResult,
   proposed: Record<string, string | number>,
   activeFootprint: Polygon,
+  baseElevationM = 0,
+  rotationDeg = 0,
 ) {
   const zones = result.zones ?? [{ id: 'zone-1', name: 'Plangebiet', constraints: result.constraints, footprint: result.footprint }]
 
-  // Compute overall bounding box for the envelope.
-  let envMinLon = Infinity, envMaxLon = -Infinity
-  let envMinLat = Infinity, envMaxLat = -Infinity
-  let envMaxZ = 0
+  let envMinE = Infinity, envMaxE = -Infinity
+  let envMinN = Infinity, envMaxN = -Infinity
+  let envMinZ = Infinity, envMaxZ = -Infinity
   const members: string[] = []
 
   for (const zone of zones) {
-    const member = buildCityGMLBuilding(zone, result, proposed, activeFootprint)
+    const member = buildCityGMLBuilding(zone, result, proposed, activeFootprint, baseElevationM, rotationDeg)
     if (!member) continue
     members.push(member.xml)
-    if (member.minLon < envMinLon) envMinLon = member.minLon
-    if (member.maxLon > envMaxLon) envMaxLon = member.maxLon
-    if (member.minLat < envMinLat) envMinLat = member.minLat
-    if (member.maxLat > envMaxLat) envMaxLat = member.maxLat
+    if (member.minE < envMinE) envMinE = member.minE
+    if (member.maxE > envMaxE) envMaxE = member.maxE
+    if (member.minN < envMinN) envMinN = member.minN
+    if (member.maxN > envMaxN) envMaxN = member.maxN
+    if (member.minZ < envMinZ) envMinZ = member.minZ
     if (member.maxZ > envMaxZ) envMaxZ = member.maxZ
   }
 
-  const CRS = 'urn:ogc:def:crs:OGC:1.3:CRS84'
+  const CRS = 'urn:ogc:def:crs:EPSG::25832'
 
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <gml:FeatureCollection
@@ -117,8 +124,8 @@ export function exportCityGML(
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   <gml:boundedBy>
     <gml:Envelope srsName="${CRS}" srsDimension="3">
-      <gml:lowerCorner>${envMinLon} ${envMinLat} 0</gml:lowerCorner>
-      <gml:upperCorner>${envMaxLon} ${envMaxLat} ${envMaxZ.toFixed(2)}</gml:upperCorner>
+      <gml:lowerCorner>${envMinE.toFixed(2)} ${envMinN.toFixed(2)} ${envMinZ.toFixed(2)}</gml:lowerCorner>
+      <gml:upperCorner>${envMaxE.toFixed(2)} ${envMaxN.toFixed(2)} ${envMaxZ.toFixed(2)}</gml:upperCorner>
     </gml:Envelope>
   </gml:boundedBy>
 ${members.join('\n')}
@@ -133,48 +140,73 @@ function buildCityGMLBuilding(
   result: ExtractionResult,
   proposed: Record<string, string | number>,
   activeFootprint: Polygon,
-): { xml: string; minLon: number; maxLon: number; minLat: number; maxLat: number; maxZ: number } | null {
+  baseElev: number,
+  rotationDeg: number,
+): { xml: string; minE: number; maxE: number; minN: number; maxN: number; minZ: number; maxZ: number } | null {
   const heightM = toNum(getConstraintValue(zone.constraints, 'max_height') ?? proposed['max_height'], 9)
   const roofLabel = String(getConstraintValue(zone.constraints, 'roof_type') ?? proposed['roof_type'] ?? 'unknown')
   const roofType = roofTypeFromLabel(roofLabel)
   const pitchDeg = toNum(getConstraintValue(zone.constraints, 'roof_pitch') ?? proposed['roof_pitch'], 35)
   const footprint = zone.footprint ?? activeFootprint
-  const ring = footprint.coordinates[0]
-  if (!ring || ring.length < 4) return null
 
-  const lons = ring.map((c) => c[0])
-  const lats = ring.map((c) => c[1])
-  const minLon = Math.min(...lons), maxLon = Math.max(...lons)
-  const minLat = Math.min(...lats), maxLat = Math.max(...lats)
-  const centerLat = (minLat + maxLat) / 2
-  const mPerDegLon = 111320 * Math.cos((centerLat * Math.PI) / 180)
-  const mPerDegLat = 110540
-  const widthM = (maxLon - minLon) * mPerDegLon
-  const heightDegM = (maxLat - minLat) * mPerDegLat
-  const spanM = Math.min(widthM, heightDegM)
-  const pitchRad = (pitchDeg * Math.PI) / 180
-  const roofRise = Math.min((spanM / 2) * Math.tan(pitchRad), heightM * 0.6)
-  const eaveH = roofType === 'flach' || roofType === 'unknown' ? heightM : Math.max(heightM - roofRise, heightM * 0.4)
+  // Build the full 3D geometry (with rotation) using the same code as the viewer.
+  const fc = buildProposedFeatures(footprint, heightM, roofType, pitchDeg, true, rotationDeg)
+  if (fc.features.length === 0) return null
 
-  const CRS = 'urn:ogc:def:crs:OGC:1.3:CRS84'
+  const CRS = 'urn:ogc:def:crs:EPSG::25832'
 
-  // Build individual polygon strings for all surfaces.
+  // Convert all polygon features to EPSG:25832 surface members with absolute Z.
+  let minE = Infinity, maxE = -Infinity, minN = Infinity, maxN = -Infinity
+  const groundZ = baseElev
+  const roofZ = baseElev + heightM
+
   const polygons: string[] = []
-
-  // Ground polygon at z=0.
-  const groundPos = ring.map((c) => `${c[0]} ${c[1]} 0`).join(' ')
-  polygons.push(gmlPolygon(groundPos, CRS))
-
-  // Roof polygon at z=heightM.
-  const roofPos = ring.map((c) => `${c[0]} ${c[1]} ${heightM.toFixed(2)}`).join(' ')
-  polygons.push(gmlPolygon(roofPos, CRS))
-
-  // Wall quads: one per edge, ground to eave.
-  for (let i = 0; i < ring.length - 1; i++) {
-    const [x1, y1] = ring[i]
-    const [x2, y2] = ring[i + 1]
-    const wallPos = `${x1} ${y1} 0 ${x2} ${y2} 0 ${x2} ${y2} ${eaveH.toFixed(2)} ${x1} ${y1} ${eaveH.toFixed(2)} ${x1} ${y1} 0`
-    polygons.push(gmlPolygon(wallPos, CRS))
+  for (const f of fc.features) {
+    if (f.geometry.type !== 'Polygon') continue
+    for (const ring of f.geometry.coordinates) {
+      const relBase = (f.properties as { base?: number })?.base ?? 0
+      const relHeight = (f.properties as { height?: number })?.height ?? heightM
+      // Each vertex: convert lon/lat to 25832, add absolute Z
+      const posEntries: string[] = []
+      for (const [lon, lat] of ring) {
+        const [e, n] = toEPSG25832(lon, lat)
+        if (e < minE) minE = e; if (e > maxE) maxE = e
+        if (n < minN) minN = n; if (n > maxN) maxN = n
+        // Interpolate Z: the viewer stores relative base/height per feature.
+        // For ground faces base=0/height=0, walls base=0/height=eave, roof base=eave/height=ridge.
+        // All vertices in a polygon ring share the same base or height level,
+        // but the ring is at a single Z level for ground/roof. For wall quads,
+        // vertices alternate between base and height Z. Since buildProposedFeatures
+        // produces flat extrusion polygons (MapLibre renders the extrusion between
+        // base and height), the polygon ring itself is at Z=0 in lon/lat.
+        // We use the feature's height property as the top Z.
+        // For the GML export we need actual 3D coordinates, so we place the
+        // polygon at the midpoint of base..height (the footprint outline).
+        posEntries.push(`${e.toFixed(2)} ${n.toFixed(2)}`)
+      }
+      // Determine the Z for this surface from the feature properties.
+      const absBase = baseElev + relBase
+      const absTop = baseElev + relHeight
+      const part = (f.properties as { part?: string })?.part
+      if (part === 'wall') {
+        // Wall quad: 4 vertices at alternating Z (ground, ground, eave, eave, ground)
+        // Rebuild with proper per-vertex Z.
+        const wallPos: string[] = []
+        for (let vi = 0; vi < ring.length; vi++) {
+          const [lon, lat] = ring[vi]
+          const [e, n] = toEPSG25832(lon, lat)
+          // First two and last vertex at base, middle two at top
+          const z = vi === 2 || vi === 3 ? absTop : absBase
+          wallPos.push(`${e.toFixed(2)} ${n.toFixed(2)} ${z.toFixed(2)}`)
+        }
+        polygons.push(gmlPolygon(wallPos.join(' '), CRS))
+      } else {
+        // Ground or roof: all vertices at a single Z level.
+        const z = part === 'roof' ? absTop : absBase
+        const posWithZ = posEntries.map((en) => `${en} ${z.toFixed(2)}`).join(' ')
+        polygons.push(gmlPolygon(posWithZ, CRS))
+      }
+    }
   }
 
   const surfaceMembers = polygons.map((p) => `          <gml:surfaceMember>\n${p}\n          </gml:surfaceMember>`).join('\n')
@@ -204,7 +236,7 @@ ${surfaceMembers}
     </pr:Building>
   </gml:featureMember>`
 
-  return { xml, minLon, maxLon, minLat, maxLat, maxZ: heightM }
+  return { xml, minE, maxE, minN, maxN, minZ: groundZ, maxZ: roofZ }
 }
 
 function gmlPolygon(posList: string, crs: string): string {
@@ -229,6 +261,8 @@ export function exportCityJSON(
   result: ExtractionResult,
   proposed: Record<string, string | number>,
   activeFootprint: Polygon,
+  baseElevationM = 0,
+  rotationDeg = 0,
 ) {
   const zones = result.zones ?? [{ id: 'zone-1', name: 'Plangebiet', constraints: result.constraints, footprint: result.footprint }]
 
@@ -252,77 +286,80 @@ export function exportCityJSON(
     const roofType = roofTypeFromLabel(roofLabel)
     const pitchDeg = toNum(getConstraintValue(zone.constraints, 'roof_pitch') ?? proposed['roof_pitch'], 35)
     const footprint = zone.footprint ?? activeFootprint
-    const ring = footprint.coordinates[0]
-    if (!ring || ring.length < 4) continue
 
-    // Compute eave height (same logic as CityGML and viewer)
-    const lons = ring.map((c) => c[0])
-    const lats = ring.map((c) => c[1])
-    const minLon = Math.min(...lons), maxLon = Math.max(...lons)
-    const minLat = Math.min(...lats), maxLat = Math.max(...lats)
-    const centerLat = (minLat + maxLat) / 2
-    const mPerDegLon = 111320 * Math.cos((centerLat * Math.PI) / 180)
-    const mPerDegLat = 110540
-    const widthM = (maxLon - minLon) * mPerDegLon
-    const heightDegM = (maxLat - minLat) * mPerDegLat
-    const spanM = Math.min(widthM, heightDegM)
-    const pitchRad = (pitchDeg * Math.PI) / 180
-    const roofRise = Math.min((spanM / 2) * Math.tan(pitchRad), heightM * 0.6)
-    const eaveH = roofType === 'flach' || roofType === 'unknown' ? heightM : Math.max(heightM - roofRise, heightM * 0.4)
+    // Build rotated 3D geometry using the same code as the viewer and CityGML export.
+    const fc = buildProposedFeatures(footprint, heightM, roofType, pitchDeg, true, rotationDeg)
+    if (fc.features.length === 0) continue
 
-    // Boundary indices for ground ring (closed, exclude last duplicate)
-    const n = ring.length - 1
-
-    // Ground surface: ring at z=0
-    const groundBoundary = ring.slice(0, n).map(([x, y]) => addVertex(x, y, 0))
-
-    // Roof surface: ring at z=heightM
-    const roofBoundary = ring.slice(0, n).map(([x, y]) => addVertex(x, y, heightM))
-
-    // Wall surfaces: one quad per edge, ground to eave
-    const wallBoundaries: number[][] = []
-    for (let i = 0; i < n; i++) {
-      const j = (i + 1) % n
-      wallBoundaries.push([
-        addVertex(ring[i][0], ring[i][1], 0),
-        addVertex(ring[j][0], ring[j][1], 0),
-        addVertex(ring[j][0], ring[j][1], eaveH),
-        addVertex(ring[i][0], ring[i][1], eaveH),
-      ])
-    }
+    // Collect all lon/lat for extent.
+    let minLon = Infinity, maxLon = -Infinity, minLat = Infinity, maxLat = -Infinity
 
     const surfaces: number[][][] = []
     const semantics: { type: string }[] = []
     const semanticValues: number[] = []
 
-    // Ground
-    surfaces.push([groundBoundary])
-    semantics.push({ type: 'GroundSurface' })
-    semanticValues.push(0)
+    // Semantic indices — one entry per type.
+    const semGround = 0; semantics.push({ type: 'GroundSurface' })
+    const semRoof = 1; semantics.push({ type: 'RoofSurface' })
+    const semWall = 2; semantics.push({ type: 'WallSurface' })
 
-    // Roof
-    surfaces.push([roofBoundary])
-    semantics.push({ type: 'RoofSurface' })
-    semanticValues.push(1)
+    for (const f of fc.features) {
+      if (f.geometry.type !== 'Polygon') continue
+      const props = f.properties as { part?: string; base?: number; height?: number }
+      const relBase = props.base ?? 0
+      const relHeight = props.height ?? heightM
+      const part = props.part
 
-    // Walls
-    const wallSemanticIdx = semantics.length
-    semantics.push({ type: 'WallSurface' })
-    for (const wb of wallBoundaries) {
-      surfaces.push([wb])
-      semanticValues.push(wallSemanticIdx)
+      for (const ring of f.geometry.coordinates) {
+        const n = ring.length
+        if (n < 4) continue
+
+        if (part === 'wall') {
+          // Wall quad: vertices alternate between base Z and top Z.
+          // buildProposedFeatures makes 5-vertex closed quads:
+          // [bl, br, tr, tl, bl] where first 2 & last are at base, middle 2 at top.
+          const boundary: number[] = []
+          for (let vi = 0; vi < n - 1; vi++) {
+            const [lon, lat] = ring[vi]
+            if (lon < minLon) minLon = lon; if (lon > maxLon) maxLon = lon
+            if (lat < minLat) minLat = lat; if (lat > maxLat) maxLat = lat
+            const z = vi === 2 || vi === 3
+              ? baseElevationM + relHeight
+              : baseElevationM + relBase
+            boundary.push(addVertex(lon, lat, z))
+          }
+          surfaces.push([boundary])
+          semanticValues.push(semWall)
+        } else {
+          // Ground or roof: all vertices at a single Z level.
+          const z = part === 'roof'
+            ? baseElevationM + relHeight
+            : baseElevationM + relBase
+          const boundary: number[] = []
+          for (let vi = 0; vi < n - 1; vi++) {
+            const [lon, lat] = ring[vi]
+            if (lon < minLon) minLon = lon; if (lon > maxLon) maxLon = lon
+            if (lat < minLat) minLat = lat; if (lat > maxLat) maxLat = lat
+            boundary.push(addVertex(lon, lat, z))
+          }
+          surfaces.push([boundary])
+          semanticValues.push(part === 'roof' ? semRoof : semGround)
+        }
+      }
     }
+
+    const floors = Math.round(toNum(getConstraintValue(zone.constraints, 'floors'), 2))
 
     cityObjects[zone.id] = {
       type: 'Building',
       attributes: {
         measuredHeight: heightM,
         roofType: roofLabel,
-        storeysAboveGround: Math.round(toNum(getConstraintValue(zone.constraints, 'floors'), 2)),
+        storeysAboveGround: floors,
         planName: result.plan.name,
         municipality: result.plan.municipality,
       },
-      geographicalExtent: [minLon, minLat, 0, maxLon, maxLat, heightM],
+      geographicalExtent: [minLon, minLat, baseElevationM, maxLon, maxLat, baseElevationM + heightM],
       geometry: [{
         type: 'Solid',
         lod: '2',

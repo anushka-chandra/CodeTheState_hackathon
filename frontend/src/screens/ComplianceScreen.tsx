@@ -314,15 +314,19 @@ export default function ComplianceScreen() {
               {t('compliance.baunvo')}
             </h2>
           </div>
-          {selectedSpot && (
-            <ExportMenu
-              onGeoJSON={() => exportGeoJSON(result, proposed, activeFootprint ?? result.footprint)}
-              onCityGML={() => exportCityGML(result, proposed, activeFootprint ?? result.footprint)}
-              onCityJSON={() => exportCityJSON(result, proposed, activeFootprint ?? result.footprint)}
-              onPrint={() => window.print()}
-              t={t}
-            />
-          )}
+          {selectedSpot && (() => {
+            const expFootprint = liveFootprint ?? activeFootprint ?? result.footprint
+            const baseElev = (cityBuildings as FeatureCollection & { groundZ?: number } | null)?.groundZ ?? 0
+            return (
+              <ExportMenu
+                onGeoJSON={() => exportGeoJSON(result, proposed, expFootprint, baseElev, rotationDeg)}
+                onCityGML={() => exportCityGML(result, proposed, expFootprint, baseElev, rotationDeg)}
+                onCityJSON={() => exportCityJSON(result, proposed, expFootprint, baseElev, rotationDeg)}
+                onPrint={() => window.print()}
+                t={t}
+              />
+            )
+          })()}
         </div>
 
         {!selectedSpot ? (

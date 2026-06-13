@@ -81,7 +81,7 @@ const BW_WFS = 'https://owsproxy.lgl-bw.de/owsproxy/wfs/WFS_INSP_BW_Gebauede_3D_
  * Convert WGS84 lon/lat to approximate EPSG:25832 easting/northing.
  * Good enough for building a BBOX — exact projection not needed.
  */
-function toEPSG25832(lon: number, lat: number): [number, number] {
+export function toEPSG25832(lon: number, lat: number): [number, number] {
   const latRad = (lat * Math.PI) / 180
   const lonRad = (lon * Math.PI) / 180
   const lon0Rad = (9 * Math.PI) / 180 // UTM zone 32N central meridian
@@ -129,6 +129,7 @@ async function fetchBWWFS(lon: number, lat: number, signal: AbortSignal): Promis
 /** Parse CityGML WFS response into GeoJSON FeatureCollection. */
 function parseCityGMLToGeoJSON(xml: string): FeatureCollection {
   const features: Feature<Polygon>[] = []
+  let globalMinZ = Infinity
   const parser = new DOMParser()
   const doc = parser.parseFromString(xml, 'text/xml')
 
@@ -202,6 +203,8 @@ function parseCityGMLToGeoJSON(xml: string): FeatureCollection {
     const ring: [number, number][] = []
     for (let j = 0; j < coords3d.length; j += 3) {
       ring.push([coords3d[j], coords3d[j + 1]])
+      const z = coords3d[j + 2]
+      if (Number.isFinite(z) && z < globalMinZ) globalMinZ = z
     }
 
     if (ring.length < 4) continue
@@ -217,7 +220,11 @@ function parseCityGMLToGeoJSON(xml: string): FeatureCollection {
     })
   }
 
-  return { type: 'FeatureCollection', features }
+  const fc: FeatureCollection = { type: 'FeatureCollection', features }
+  // Attach the minimum ground Z seen across all buildings so exporters can
+  // place the proposed building at the correct absolute elevation.
+  ;(fc as FeatureCollection & { groundZ?: number }).groundZ = globalMinZ === Infinity ? 0 : globalMinZ
+  return fc
 }
 
 // ── Overpass API (fallback) ──────────────────────────────────────────────────
