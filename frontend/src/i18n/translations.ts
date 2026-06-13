@@ -204,6 +204,23 @@ export const TRANSLATIONS: Record<string, Entry> = {
     de: 'Ändern Sie einen geplanten Wert für eine sofortige Neuprüfung. Der 3D-Entwurf aktualisiert sich live mit Höhe und Dachform.',
   },
   'compliance.zoneLabel': { en: 'Zone', de: 'Zone' },
+  'compliance.parcelArea': { en: 'Cadastral parcel: {area} m\u00B2', de: 'Flurst\u00FCck: {area} m\u00B2' },
+  'compliance.referenceTitle': { en: 'Reference LOD2', de: 'Referenz LOD2' },
+  'compliance.refHeight': { en: 'Reference height', de: 'Referenzh\u00F6he' },
+  'compliance.refArea': { en: 'Reference area', de: 'Referenzfl\u00E4che' },
+  'compliance.refRoof': { en: 'Roof type match', de: 'Dachform-Abgleich' },
+  'compliance.deltaClose': { en: 'Matching', de: '\u00DCbereinstimmend' },
+  'compliance.deltaOff': { en: 'Deviation {delta}', de: 'Abweichung {delta}' },
+  'compliance.exportCityJSON': { en: 'CityJSON 2.0', de: 'CityJSON 2.0' },
+  'compliance.noParcel': { en: 'No parcel found', de: 'Kein Flurst\u00FCck gefunden' },
+  'compliance.noReference': { en: 'No reference building', de: 'Kein Referenzgeb\u00E4ude' },
+  'compliance.legendSpot': { en: 'Available site', de: 'Verf\u00FCgbarer Standort' },
+  'compliance.spotWord': { en: 'Selected site', de: 'Gew\u00E4hlter Standort' },
+  'compliance.resetSpot': { en: 'Reset', de: 'Zur\u00FCcksetzen' },
+  'compliance.spotHint': {
+    en: 'Select a green spot on the map to place your building and check compliance against the extracted constraints.',
+    de: 'W\u00E4hlen Sie einen gr\u00FCnen Punkt auf der Karte, um Ihr Geb\u00E4ude zu platzieren und die Konformit\u00E4t mit den extrahierten Vorgaben zu pr\u00FCfen.',
+  },
 
   // ── Confidence chip ──────────────────────────────────────────────────────
   'confidence.high': { en: 'High', de: 'Hoch' },
@@ -252,6 +269,7 @@ export const TRANSLATIONS: Record<string, Entry> = {
     de: 'Karte nicht verfügbar — Schema wird angezeigt.',
   },
   'viewer.loading': { en: 'loading 3D map…', de: '3D-Karte wird geladen…' },
+  'viewer.selectSpot': { en: 'Click a green spot to place a building', de: 'Gr\u00FCnen Punkt anklicken, um ein Geb\u00E4ude zu platzieren' },
 
   // ── Print report ─────────────────────────────────────────────────────────
   'print.header': {

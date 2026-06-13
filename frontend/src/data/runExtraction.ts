@@ -41,11 +41,13 @@ const STAGE_MIN_MS = 600
 const STAGE_MAX_MS = 900
 
 // Deterministic-ish jitter without Math.random (kept reproducible for demos).
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function stageDuration(index: number): number {
   const span = STAGE_MAX_MS - STAGE_MIN_MS
   const t = (index * 137) % 100 // 0..99 spread
   return STAGE_MIN_MS + Math.round((t / 99) * span)
 }
+void stageDuration
 
 function delay(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {

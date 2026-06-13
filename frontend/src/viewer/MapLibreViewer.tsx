@@ -9,7 +9,6 @@ interface MapLibreViewerProps extends Viewer3DProps {
 
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN as string | undefined
 
-// Use Mapbox Static Tiles API (raster) when a token is available; fall back to OpenFreeMap.
 const mapStyle: string | maplibreStyle = MAPBOX_TOKEN
   ? {
       version: 8 as const,
@@ -38,12 +37,17 @@ const PROPOSED_WALL = 'proposed-wall-extrusion'
 const PROPOSED_ROOF = 'proposed-roof-extrusion'
 const CITY_SRC = 'city-buildings'
 const CITY_LAYER = 'city-buildings-extrusion'
+const PARCEL_SRC = 'parcel-outline'
+const PARCEL_LAYER = 'parcel-outline-line'
+const SPOTS_SRC = 'available-spots'
+const SPOTS_LAYER = 'available-spots-circle'
+const SPOTS_GLOW_LAYER = 'available-spots-glow'
 
 function wallColor(compliant: boolean): string {
-  return compliant ? '#E85040' : '#D42B1A'
+  return compliant ? '#2D8E6E' : '#D42B1A'
 }
 function roofColor(compliant: boolean): string {
-  return compliant ? '#CC3A2A' : '#B81E10'
+  return compliant ? '#238060' : '#B81E10'
 }
 
 const CITY_PAINT = {
@@ -54,10 +58,15 @@ const CITY_PAINT = {
   'fill-extrusion-vertical-gradient': true,
 }
 
+const EMPTY_FC: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] }
+
 export default function MapLibreViewer({
   center,
   cityBuildings,
   proposed,
+  spots,
+  onSpotClick,
+  parcelOutline,
   onReady,
   onError,
 }: MapLibreViewerProps) {
@@ -65,19 +74,29 @@ export default function MapLibreViewer({
   const mapRef = useRef<MlMap | null>(null)
   const [mapReady, setMapReady] = useState(false)
 
-  const proposedFC = useMemo(
-    () =>
-      buildProposedFeatures(
-        proposed.footprint,
-        proposed.heightM,
-        proposed.roofType,
-        proposed.roofPitchDeg ?? 35,
-        proposed.compliant,
-      ),
-    [proposed.footprint, proposed.heightM, proposed.roofType, proposed.roofPitchDeg, proposed.compliant],
-  )
+  const proposedFC = useMemo(() => {
+    if (!proposed) return EMPTY_FC
+    return buildProposedFeatures(
+      proposed.footprint,
+      proposed.heightM,
+      proposed.roofType,
+      proposed.roofPitchDeg ?? 35,
+      proposed.compliant,
+    )
+  }, [proposed])
 
-  // Shared helper to ensure city buildings layer exists on the map.
+  const spotsFC = useMemo((): GeoJSON.FeatureCollection => {
+    if (!spots?.length) return EMPTY_FC
+    return {
+      type: 'FeatureCollection',
+      features: spots.map((s, i) => ({
+        type: 'Feature' as const,
+        properties: { id: i },
+        geometry: { type: 'Point' as const, coordinates: [s.lon, s.lat] },
+      })),
+    }
+  }, [spots])
+
   const ensureCityLayer = useCallback((map: MlMap, data: typeof cityBuildings) => {
     if (!data?.features.length) return
     const existing = map.getSource(CITY_SRC) as GeoJSONSource | undefined
@@ -120,12 +139,48 @@ export default function MapLibreViewer({
         map.once('load', () => {
           if (disposed || !map) return
 
-          // City buildings — add if already available.
+          // City buildings.
           if (cityBuildings?.features.length) {
             ensureCityLayer(map, cityBuildings)
           }
 
-          // Proposed building — multi-part source (walls + roof).
+          // Green spots — available building sites.
+          map.addSource(SPOTS_SRC, { type: 'geojson', data: spotsFC })
+          map.addLayer({
+            id: SPOTS_GLOW_LAYER,
+            type: 'circle',
+            source: SPOTS_SRC,
+            paint: {
+              'circle-radius': 14,
+              'circle-color': '#2DD4A8',
+              'circle-opacity': 0.15,
+              'circle-blur': 0.8,
+            },
+          })
+          map.addLayer({
+            id: SPOTS_LAYER,
+            type: 'circle',
+            source: SPOTS_SRC,
+            paint: {
+              'circle-radius': 7,
+              'circle-color': '#2DD4A8',
+              'circle-opacity': 0.85,
+              'circle-stroke-width': 2,
+              'circle-stroke-color': '#FFFFFF',
+              'circle-stroke-opacity': 0.9,
+            },
+          })
+
+          // Click handler for spots.
+          map.on('click', SPOTS_LAYER, (e) => {
+            if (!e.features?.length) return
+            const coords = (e.features[0].geometry as GeoJSON.Point).coordinates
+            onSpotClick?.({ lon: coords[0], lat: coords[1] })
+          })
+          map.on('mouseenter', SPOTS_LAYER, () => { map!.getCanvas().style.cursor = 'pointer' })
+          map.on('mouseleave', SPOTS_LAYER, () => { map!.getCanvas().style.cursor = '' })
+
+          // Proposed building source (initially empty).
           map.addSource(PROPOSED_SRC, { type: 'geojson', data: proposedFC })
           map.addLayer({
             id: PROPOSED_WALL,
@@ -133,10 +188,10 @@ export default function MapLibreViewer({
             source: PROPOSED_SRC,
             filter: ['==', ['get', 'part'], 'wall'],
             paint: {
-              'fill-extrusion-color': wallColor(proposed.compliant),
+              'fill-extrusion-color': wallColor(proposed?.compliant ?? true),
               'fill-extrusion-height': ['to-number', ['get', 'height'], 0],
               'fill-extrusion-base': ['to-number', ['get', 'base'], 0],
-              'fill-extrusion-opacity': 0.95,
+              'fill-extrusion-opacity': 0.92,
             },
           })
           map.addLayer({
@@ -145,12 +200,31 @@ export default function MapLibreViewer({
             source: PROPOSED_SRC,
             filter: ['==', ['get', 'part'], 'roof'],
             paint: {
-              'fill-extrusion-color': roofColor(proposed.compliant),
+              'fill-extrusion-color': roofColor(proposed?.compliant ?? true),
               'fill-extrusion-height': ['to-number', ['get', 'height'], 0],
               'fill-extrusion-base': ['to-number', ['get', 'base'], 0],
-              'fill-extrusion-opacity': 0.95,
+              'fill-extrusion-opacity': 0.92,
             },
           })
+
+          // Parcel outline.
+          if (parcelOutline) {
+            map.addSource(PARCEL_SRC, {
+              type: 'geojson',
+              data: { type: 'Feature', properties: {}, geometry: parcelOutline },
+            })
+            map.addLayer({
+              id: PARCEL_LAYER,
+              type: 'line',
+              source: PARCEL_SRC,
+              paint: {
+                'line-color': '#2A9D8F',
+                'line-width': 2.5,
+                'line-dasharray': [4, 3],
+                'line-opacity': 0.85,
+              },
+            })
+          }
 
           setMapReady(true)
           onReady?.()
@@ -169,12 +243,20 @@ export default function MapLibreViewer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Add/update city buildings when data arrives OR when map becomes ready.
+  // Update city buildings.
   useEffect(() => {
     const map = mapRef.current
     if (!map || !mapReady || !cityBuildings?.features.length) return
     ensureCityLayer(map, cityBuildings)
   }, [cityBuildings, mapReady, ensureCityLayer])
+
+  // Update spots.
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !mapReady) return
+    const src = map.getSource(SPOTS_SRC) as GeoJSONSource | undefined
+    if (src) src.setData(spotsFC)
+  }, [spotsFC, mapReady])
 
   // Live-update the proposed building.
   useEffect(() => {
@@ -182,13 +264,40 @@ export default function MapLibreViewer({
     if (!map || !mapReady) return
     const src = map.getSource(PROPOSED_SRC) as GeoJSONSource | undefined
     if (src) src.setData(proposedFC)
+    const compliant = proposed?.compliant ?? true
     if (map.getLayer(PROPOSED_WALL)) {
-      map.setPaintProperty(PROPOSED_WALL, 'fill-extrusion-color', wallColor(proposed.compliant))
+      map.setPaintProperty(PROPOSED_WALL, 'fill-extrusion-color', wallColor(compliant))
     }
     if (map.getLayer(PROPOSED_ROOF)) {
-      map.setPaintProperty(PROPOSED_ROOF, 'fill-extrusion-color', roofColor(proposed.compliant))
+      map.setPaintProperty(PROPOSED_ROOF, 'fill-extrusion-color', roofColor(compliant))
     }
-  }, [proposedFC, proposed.compliant, mapReady])
+  }, [proposedFC, proposed?.compliant, mapReady])
+
+  // Parcel outline updates.
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !mapReady || !parcelOutline) return
+    const existing = map.getSource(PARCEL_SRC) as GeoJSONSource | undefined
+    if (existing) {
+      existing.setData({ type: 'Feature', properties: {}, geometry: parcelOutline })
+    } else {
+      map.addSource(PARCEL_SRC, {
+        type: 'geojson',
+        data: { type: 'Feature', properties: {}, geometry: parcelOutline },
+      })
+      map.addLayer({
+        id: PARCEL_LAYER,
+        type: 'line',
+        source: PARCEL_SRC,
+        paint: {
+          'line-color': '#2A9D8F',
+          'line-width': 2.5,
+          'line-dasharray': [4, 3],
+          'line-opacity': 0.85,
+        },
+      })
+    }
+  }, [parcelOutline, mapReady])
 
   return <div ref={containerRef} className="h-full w-full bg-[#15171A]" />
 }

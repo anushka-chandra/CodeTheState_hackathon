@@ -64,6 +64,30 @@ export default function Viewer3DPlaceholder({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  const cityCount = cityBuildings?.features?.length ?? 0
+
+  if (!proposed) {
+    return (
+      <div className="relative flex h-full w-full items-center justify-center overflow-hidden bg-[#15171A]">
+        <IsoGrid />
+        <div className="z-10 flex flex-col items-center gap-2 text-center">
+          <span className="inline-block h-4 w-4 rounded-full bg-[#2DD4A8] opacity-80" />
+          <span className="font-display text-[0.7rem] uppercase tracking-[0.16em] text-white/60">
+            {t('viewer.selectSpot')}
+          </span>
+        </div>
+        <div className="absolute bottom-3 left-3 hidden items-center gap-2 sm:flex">
+          <span className="h-2.5 w-2.5 bg-white/30" aria-hidden />
+          <span className="font-mono text-[0.6rem] text-white/45">
+            {cityCount > 0
+              ? t('viewer.existingBuildings', { n: cityCount })
+              : t('viewer.backdropMissing')}
+          </span>
+        </div>
+      </div>
+    )
+  }
+
   const geom = useMemo(() => {
     const ring = proposed.footprint.coordinates[0]
     const lat0 = ring[0]?.[1] ?? 48.695
@@ -106,12 +130,10 @@ export default function Viewer3DPlaceholder({
   const topPoly = top.map(tx).join(' ')
   const apexXY = tx(apex)
 
-  // Compliance colours.
-  const fill = proposed.compliant ? '#D7503F' : '#C2362B'
-  const wall = proposed.compliant ? '#A33A2E' : '#8F271F'
-  const wallDark = proposed.compliant ? '#7E2C22' : '#6B1D17'
-
-  const cityCount = cityBuildings?.features?.length ?? 0
+  // Compliance colours: green when passing, red when failing.
+  const fill = proposed.compliant ? '#2DD4A8' : '#C2362B'
+  const wall = proposed.compliant ? '#238060' : '#8F271F'
+  const wallDark = proposed.compliant ? '#1B6B50' : '#6B1D17'
 
   return (
     <div className="relative h-full w-full overflow-hidden bg-[#15171A]">
@@ -236,7 +258,7 @@ export default function Viewer3DPlaceholder({
   )
 }
 
-function roofLabel(t: Viewer3DProps['proposed']['roofType']): string {
+function roofLabel(t: string): string {
   switch (t) {
     case 'flach':
       return 'Flachdach'
