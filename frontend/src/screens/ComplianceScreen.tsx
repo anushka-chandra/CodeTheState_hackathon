@@ -123,6 +123,27 @@ function computeSpots(
   return []
 }
 
+function rotatePolygon(poly: Polygon, deg: number): Polygon {
+  if (!deg) return poly
+  const ring = poly.coordinates[0]
+  let cx = 0, cy = 0
+  const n = ring.length - 1
+  for (let i = 0; i < n; i++) { cx += ring[i][0]; cy += ring[i][1] }
+  cx /= n; cy /= n
+  const rad = (deg * Math.PI) / 180
+  const cos = Math.cos(rad), sin = Math.sin(rad)
+  const mPerDegLon = 111320 * Math.cos((cy * Math.PI) / 180)
+  const mPerDegLat = 110540
+  const rotated = ring.map(([x, y]) => {
+    const dx = (x - cx) * mPerDegLon
+    const dy = (y - cy) * mPerDegLat
+    const rx = dx * cos - dy * sin
+    const ry = dx * sin + dy * cos
+    return [cx + rx / mPerDegLon, cy + ry / mPerDegLat]
+  })
+  return { type: 'Polygon', coordinates: [rotated] }
+}
+
 // ── Main screen ──────────────────────────────────────────────────────────────
 
 export default function ComplianceScreen() {
@@ -141,6 +162,7 @@ export default function ComplianceScreen() {
 
   // Selected spot — null means no building placed yet.
   const [selectedSpot, setSelectedSpot] = useState<{ lon: number; lat: number } | null>(null)
+  const [rotationDeg, setRotationDeg] = useState(0)
 
   const rows = useMemo(
     () => evaluateCompliance(constraints, proposed, lang),
@@ -163,33 +185,37 @@ export default function ComplianceScreen() {
   const liveFootprint = useMemo(() => {
     if (!selectedSpot) return null
 
+    let base: Polygon
+
     // Use real parcel shape if available
     if (parcel) {
       const scaleFactor = Math.sqrt(Math.max(grz, 0.05))
-      return scalePolygon(parcel, scaleFactor)
+      base = scalePolygon(parcel, scaleFactor)
+    } else {
+      // Fabricated rectangle at the selected spot
+      const plotArea = parcelArea ?? PLOT_AREA
+      const buildingArea = Math.max(grz, 0.05) * plotArea
+      const aspect = 1.3
+      const widthM = Math.sqrt(buildingArea * aspect)
+      const depthM = buildingArea / widthM
+      const mPerDegLon = 111320 * Math.cos((selectedSpot.lat * Math.PI) / 180)
+      const mPerDegLat = 110540
+      const hw = (widthM / 2) / mPerDegLon
+      const hh = (depthM / 2) / mPerDegLat
+      base = {
+        type: 'Polygon' as const,
+        coordinates: [[
+          [selectedSpot.lon - hw, selectedSpot.lat - hh],
+          [selectedSpot.lon + hw, selectedSpot.lat - hh],
+          [selectedSpot.lon + hw, selectedSpot.lat + hh],
+          [selectedSpot.lon - hw, selectedSpot.lat + hh],
+          [selectedSpot.lon - hw, selectedSpot.lat - hh],
+        ]],
+      } satisfies Polygon
     }
 
-    // Fabricated rectangle at the selected spot
-    const plotArea = parcelArea ?? PLOT_AREA
-    const buildingArea = Math.max(grz, 0.05) * plotArea
-    const aspect = 1.3
-    const widthM = Math.sqrt(buildingArea * aspect)
-    const depthM = buildingArea / widthM
-    const mPerDegLon = 111320 * Math.cos((selectedSpot.lat * Math.PI) / 180)
-    const mPerDegLat = 110540
-    const hw = (widthM / 2) / mPerDegLon
-    const hh = (depthM / 2) / mPerDegLat
-    return {
-      type: 'Polygon' as const,
-      coordinates: [[
-        [selectedSpot.lon - hw, selectedSpot.lat - hh],
-        [selectedSpot.lon + hw, selectedSpot.lat - hh],
-        [selectedSpot.lon + hw, selectedSpot.lat + hh],
-        [selectedSpot.lon - hw, selectedSpot.lat + hh],
-        [selectedSpot.lon - hw, selectedSpot.lat - hh],
-      ]],
-    } satisfies Polygon
-  }, [selectedSpot, grz, parcel, parcelArea])
+    return rotatePolygon(base, rotationDeg)
+  }, [selectedSpot, grz, parcel, parcelArea, rotationDeg])
 
   const heightM = maxHeight > 0 ? maxHeight : Math.max(floors * 3, 3)
 
@@ -224,6 +250,7 @@ export default function ComplianceScreen() {
 
   const handleSpotClick = useCallback((center: { lon: number; lat: number }) => {
     setSelectedSpot(center)
+    setRotationDeg(0)
   }, [])
 
   return (
@@ -271,6 +298,21 @@ export default function ComplianceScreen() {
               >
                 {t('compliance.resetSpot')}
               </button>
+              <span className="ml-3 inline-flex items-center gap-2">
+                Rotation
+                <input
+                  type="range" min={0} max={359} value={rotationDeg}
+                  onChange={(e) => setRotationDeg(Number(e.target.value))}
+                  className="h-1 w-28 align-middle"
+                  aria-label="Rotate building"
+                />
+                <button
+                  type="button"
+                  onClick={() => setRotationDeg((rotationDeg + 15) % 360)}
+                  className="border border-ink/30 px-1.5 py-0.5 font-display text-[0.55rem] uppercase tracking-[0.12em] text-ink/60 hover:bg-plan-paper"
+                >+15°</button>
+                <span className="font-mono">{rotationDeg}°</span>
+              </span>
             </>
           ) : (
             <span>{t('viewer.selectSpot')}</span>

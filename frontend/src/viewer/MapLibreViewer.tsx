@@ -7,30 +7,7 @@ interface MapLibreViewerProps extends Viewer3DProps {
   onError?: () => void
 }
 
-const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN as string | undefined
-
-const mapStyle: string | maplibreStyle = MAPBOX_TOKEN
-  ? {
-      version: 8 as const,
-      sources: {
-        'mapbox-base': {
-          type: 'raster' as const,
-          tiles: [
-            `https://api.mapbox.com/styles/v1/mapbox/light-v11/tiles/{z}/{x}/{y}@2x?access_token=${MAPBOX_TOKEN}`,
-          ],
-          tileSize: 512,
-          attribution: '&copy; <a href="https://www.mapbox.com/">Mapbox</a>',
-        },
-      },
-      layers: [{ id: 'base', type: 'raster' as const, source: 'mapbox-base' }],
-    }
-  : 'https://tiles.openfreemap.org/styles/liberty'
-
-type maplibreStyle = {
-  version: 8
-  sources: Record<string, unknown>
-  layers: unknown[]
-}
+const mapStyle = 'https://tiles.openfreemap.org/styles/liberty'
 
 const PROPOSED_SRC = 'proposed-building'
 const PROPOSED_WALL = 'proposed-wall-extrusion'
@@ -51,10 +28,16 @@ function roofColor(compliant: boolean): string {
 }
 
 const CITY_PAINT = {
-  'fill-extrusion-color': '#a09b90',
+  'fill-extrusion-color': [
+    'interpolate', ['linear'], ['to-number', ['get', 'height'], 8],
+    0, '#d8d3c8',
+    10, '#bdb7ab',
+    25, '#a39d92',
+    50, '#8a847b',
+  ] as unknown as string,
   'fill-extrusion-height': ['case', ['has', 'height'], ['to-number', ['get', 'height'], 8], 8] as unknown as number,
   'fill-extrusion-base': 0,
-  'fill-extrusion-opacity': 0.75,
+  'fill-extrusion-opacity': 0.9,
   'fill-extrusion-vertical-gradient': true,
 }
 
@@ -301,6 +284,26 @@ export default function MapLibreViewer({
       map.setPaintProperty(PROPOSED_ROOF, 'fill-extrusion-color', roofColor(compliant))
     }
   }, [proposedFC, proposed?.compliant, mapReady])
+
+  // Frame the camera on the placed building (or the parcel).
+  const focusKeyRef = useRef<string>('')
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !mapReady) return
+    const geom = proposed?.footprint ?? parcelOutline
+    const ring = geom?.coordinates?.[0]
+    if (!ring?.length) return
+    let cx = 0, cy = 0
+    const n = ring.length - 1
+    for (let i = 0; i < n; i++) { cx += ring[i][0]; cy += ring[i][1] }
+    cx /= n; cy /= n
+    const key = `${proposed ? 'b' : 'p'}:${cx.toFixed(5)},${cy.toFixed(5)}`
+    if (key === focusKeyRef.current) return
+    focusKeyRef.current = key
+    try {
+      map.easeTo({ center: [cx, cy], zoom: proposed ? 18.2 : 17.4, pitch: 55, duration: 900 })
+    } catch { /* ignore */ }
+  }, [proposed, parcelOutline, mapReady])
 
   // Parcel outline updates.
   useEffect(() => {
