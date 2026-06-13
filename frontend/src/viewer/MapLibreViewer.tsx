@@ -19,6 +19,9 @@ const PARCEL_LAYER = 'parcel-outline-line'
 const SPOTS_SRC = 'available-spots'
 const SPOTS_LAYER = 'available-spots-circle'
 const SPOTS_GLOW_LAYER = 'available-spots-glow'
+const ORTHO_SRC = 'bw-ortho'
+const ORTHO_LAYER = 'bw-ortho-raster'
+const ORTHO_TILE = 'https://owsproxy.lgl-bw.de/owsproxy/ows/WMS_LGL-BW_ATKIS_DOP_20_C?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=IMAGES_DOP_20_RGB&STYLES=&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256&FORMAT=image/png'
 
 function wallColor(compliant: boolean): string {
   return compliant ? '#2D8E6E' : '#D42B1A'
@@ -56,6 +59,7 @@ export default function MapLibreViewer({
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<MlMap | null>(null)
   const [mapReady, setMapReady] = useState(false)
+  const [orthoVisible, setOrthoVisible] = useState(false)
 
   const proposedFC = useMemo(() => {
     if (!proposed) return EMPTY_FC
@@ -122,6 +126,23 @@ export default function MapLibreViewer({
 
         map.once('load', () => {
           if (disposed || !map) return
+
+          // BW orthophoto underlay (hidden by default).
+          try {
+            map.addSource(ORTHO_SRC, {
+              type: 'raster',
+              tiles: [ORTHO_TILE],
+              tileSize: 256,
+              attribution: 'Datengrundlage: LGL, www.lgl-bw.de',
+            })
+            map.addLayer({
+              id: ORTHO_LAYER,
+              type: 'raster',
+              source: ORTHO_SRC,
+              layout: { visibility: 'none' },
+              paint: { 'raster-opacity': 1 },
+            })
+          } catch { /* ortho source unavailable — skip */ }
 
           // City buildings.
           if (cityBuildings?.features.length) {
@@ -306,6 +327,17 @@ export default function MapLibreViewer({
     } catch { /* ignore */ }
   }, [proposed, parcelOutline, mapReady])
 
+  // Sync ortho layer visibility.
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !mapReady) return
+    try {
+      if (map.getLayer(ORTHO_LAYER)) {
+        map.setLayoutProperty(ORTHO_LAYER, 'visibility', orthoVisible ? 'visible' : 'none')
+      }
+    } catch { /* ignore */ }
+  }, [orthoVisible, mapReady])
+
   // Parcel outline updates.
   useEffect(() => {
     const map = mapRef.current
@@ -332,5 +364,18 @@ export default function MapLibreViewer({
     }
   }, [parcelOutline, mapReady])
 
-  return <div ref={containerRef} className="h-full w-full bg-[#15171A]" />
+  return (
+    <div className="relative h-full w-full bg-[#15171A]">
+      <div ref={containerRef} className="h-full w-full" />
+      {mapReady && (
+        <button
+          type="button"
+          onClick={() => setOrthoVisible((v) => !v)}
+          className="absolute bottom-6 left-3 z-10 rounded bg-white/90 px-2.5 py-1 text-xs font-medium text-gray-700 shadow backdrop-blur hover:bg-white"
+        >
+          {orthoVisible ? 'Map' : 'Satellite'}
+        </button>
+      )}
+    </div>
+  )
 }

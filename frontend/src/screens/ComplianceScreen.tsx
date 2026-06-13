@@ -6,6 +6,8 @@ import { evaluateCompliance, summarise } from '../data/compliance'
 import { roofTypeFromLabel } from '../data/roof'
 import { useCityBuildings } from '../data/useCityBuildings'
 import { useCadastralParcel, scalePolygon } from '../data/useCadastralParcel'
+import { usePlanGeometry } from '../data/usePlanGeometry'
+import { useCityRoads } from '../data/useCityRoads'
 import { compareToReference } from '../data/compareReference'
 import Viewer3D from '../viewer/Viewer3D'
 import VerdictChip from '../components/VerdictChip'
@@ -123,6 +125,223 @@ function computeSpots(
   return []
 }
 
+// ── Plan-geometry-aware spots ────────────────────────────────────────────────
+
+/**
+ * Extract outer rings from plan geometry features (Polygon + MultiPolygon).
+ * Prefers features whose gemeinde matches the plan's municipality; if none
+ * match, uses all features in the bbox (avoids the wrong-town trap because
+ * the bbox is already spatially centred on the real centroid).
+ */
+function extractPlanRings(
+  planGeometry: FeatureCollection,
+  plan: { name: string; municipality: string },
+): number[][][] {
+  const allRings: { ring: number[][]; matches: boolean }[] = []
+  const muniLower = plan.municipality.toLowerCase().replace(/[,\s]+/g, ' ').trim()
+
+  for (const f of planGeometry.features) {
+    if (!f.geometry) continue
+    const props = f.properties ?? {}
+    const gemeinde = String(props.gemeinde ?? '').toLowerCase().replace(/[,\s]+/g, ' ').trim()
+    const matches =
+      muniLower.length > 0 &&
+      gemeinde.length > 0 &&
+      (gemeinde.includes(muniLower) || muniLower.includes(gemeinde.split(' ')[0]))
+
+    if (f.geometry.type === 'Polygon') {
+      const ring = (f.geometry as Polygon).coordinates[0]
+      if (ring?.length >= 4) allRings.push({ ring, matches })
+    } else if (f.geometry.type === 'MultiPolygon') {
+      for (const poly of (f.geometry as GeoJSON.MultiPolygon).coordinates) {
+        const ring = poly[0]
+        if (ring?.length >= 4) allRings.push({ ring, matches })
+      }
+    }
+  }
+
+  const matching = allRings.filter((r) => r.matches)
+  return (matching.length > 0 ? matching : allRings).map((r) => r.ring)
+}
+
+/**
+ * Distance in metres from point p to the line segment a–b (all in lon/lat).
+ * Converts to local metre-space using the same mPerDeg factors used elsewhere.
+ */
+function distToSegmentM(
+  pLon: number, pLat: number,
+  aLon: number, aLat: number,
+  bLon: number, bLat: number,
+  mPerDegLon: number, mPerDegLat: number,
+): number {
+  const ax = (aLon - pLon) * mPerDegLon, ay = (aLat - pLat) * mPerDegLat
+  const bx = (bLon - pLon) * mPerDegLon, by = (bLat - pLat) * mPerDegLat
+  const dx = bx - ax, dy = by - ay
+  const lenSq = dx * dx + dy * dy
+  if (lenSq === 0) return Math.hypot(ax, ay)
+  const t = Math.max(0, Math.min(1, ((-ax) * dx + (-ay) * dy) / lenSq))
+  const cx = ax + t * dx, cy = ay + t * dy
+  return Math.hypot(cx, cy)
+}
+
+/** Extract road segments as [[lon,lat],[lon,lat]] pairs from a roads FeatureCollection. */
+function extractRoadSegments(roads: FeatureCollection | null): [number, number, number, number][] {
+  const segs: [number, number, number, number][] = [] // [aLon, aLat, bLon, bLat]
+  if (!roads) return segs
+  for (const f of roads.features) {
+    if (!f.geometry || f.geometry.type !== 'LineString') continue
+    const coords = f.geometry.coordinates
+    for (let i = 0; i < coords.length - 1; i++) {
+      segs.push([coords[i][0], coords[i][1], coords[i + 1][0], coords[i + 1][1]])
+    }
+  }
+  return segs
+}
+
+/**
+ * Generate spots tightly clustered among existing buildings, constrained to
+ * plan polygons when available, avoiding roads and building edges.
+ *
+ * A candidate must satisfy ALL of:
+ *   1. Within SEARCH_RADIUS_M (220 m) of the plan centroid.
+ *   2. At least MIN_NEIGHBORS (2) city buildings within NEIGHBOR_RADIUS_M (75 m).
+ *   3. NOT inside any building footprint AND not within BUILDING_BUFFER_M of any
+ *      building edge.
+ *   4. If plan polygons are available, strictly inside a plan polygon.
+ *   5. Not within ROAD_CLEARANCE_M of any road segment.
+ *
+ * Candidates are deterministically spread: sorted by a hash of their grid
+ * position, then greedily selected with SPOT_SPACING_M spacing.
+ * Returns [] if fewer than MIN_VIABLE points survive — caller falls back to
+ * computeSpots().
+ */
+function computeSpotsFromPlan(
+  center: { lon: number; lat: number },
+  planGeometry: FeatureCollection,
+  cityBuildings: FeatureCollection | null,
+  plan: { name: string; municipality: string },
+  cityRoads: FeatureCollection | null,
+): { lon: number; lat: number }[] {
+  const SEARCH_RADIUS_M = 220
+  const GRID_STEP_M = 18
+  const NEIGHBOR_RADIUS_M = 75
+  const MIN_NEIGHBORS = 2
+  const BUILDING_BUFFER_M = 6
+  const ROAD_CLEARANCE_M = 12
+  const SPOT_SPACING_M = 28
+  const MAX_SPOTS = 12
+  const MIN_VIABLE = 4
+
+  const mPerDegLat = 110540
+  const mPerDegLon = 111320 * Math.cos((center.lat * Math.PI) / 180)
+  const distM = (
+    a: { lon: number; lat: number },
+    b: { lon: number; lat: number },
+  ) => Math.hypot((a.lon - b.lon) * mPerDegLon, (a.lat - b.lat) * mPerDegLat)
+
+  const planRings = extractPlanRings(planGeometry, plan)
+  const roadSegs = extractRoadSegments(cityRoads)
+
+  // Building footprints + centroids.
+  const buildingRings: number[][][] = []
+  const bldgCentroids: { lon: number; lat: number }[] = []
+  for (const f of cityBuildings?.features ?? []) {
+    if (f.geometry.type !== 'Polygon') continue
+    const ring = (f.geometry as Polygon).coordinates[0]
+    if (!ring || ring.length < 4) continue
+    buildingRings.push(ring)
+    let cx = 0, cy = 0
+    const n = ring.length - 1
+    for (let i = 0; i < n; i++) { cx += ring[i][0]; cy += ring[i][1] }
+    bldgCentroids.push({ lon: cx / n, lat: cy / n })
+  }
+
+  /** Check if point is too close to any building edge. */
+  const tooCloseToBuilding = (pLon: number, pLat: number): boolean => {
+    for (const ring of buildingRings) {
+      for (let i = 0; i < ring.length - 1; i++) {
+        if (distToSegmentM(pLon, pLat, ring[i][0], ring[i][1], ring[i + 1][0], ring[i + 1][1], mPerDegLon, mPerDegLat) < BUILDING_BUFFER_M) {
+          return true
+        }
+      }
+    }
+    return false
+  }
+
+  /** Check if point is too close to any road segment. */
+  const tooCloseToRoad = (pLon: number, pLat: number): boolean => {
+    for (const [aLon, aLat, bLon, bLat] of roadSegs) {
+      if (distToSegmentM(pLon, pLat, aLon, aLat, bLon, bLat, mPerDegLon, mPerDegLat) < ROAD_CLEARANCE_M) {
+        return true
+      }
+    }
+    return false
+  }
+
+  const stepLon = GRID_STEP_M / mPerDegLon
+  const stepLat = GRID_STEP_M / mPerDegLat
+  const radLon = SEARCH_RADIUS_M / mPerDegLon
+  const radLat = SEARCH_RADIUS_M / mPerDegLat
+
+  type Cand = { lon: number; lat: number; neighbors: number; hash: number }
+  const cands: Cand[] = []
+
+  // Deterministic hash for scatter (seeded from grid indices, not Math.random).
+  let gridCol = 0
+  for (let lon = center.lon - radLon; lon <= center.lon + radLon; lon += stepLon) {
+    let gridRow = 0
+    for (let lat = center.lat - radLat; lat <= center.lat + radLat; lat += stepLat) {
+      const pt = { lon, lat }
+
+      // 1. Hard radius cap.
+      if (distM(pt, center) > SEARCH_RADIUS_M) { gridRow++; continue }
+
+      // 4. If plan geometry exists, must be strictly inside a plan polygon.
+      if (planRings.length > 0 && !pointInAnyPolygon(lon, lat, planRings)) { gridRow++; continue }
+
+      // 3. Must not be inside any building footprint.
+      if (pointInAnyPolygon(lon, lat, buildingRings)) { gridRow++; continue }
+
+      // 3b. Must not be within BUILDING_BUFFER_M of any building edge.
+      if (tooCloseToBuilding(lon, lat)) { gridRow++; continue }
+
+      // 5. Must not be within ROAD_CLEARANCE_M of any road.
+      if (tooCloseToRoad(lon, lat)) { gridRow++; continue }
+
+      // Neighbor count for filter #2.
+      let neighbors = 0
+      for (const b of bldgCentroids) {
+        if (distM(pt, b) <= NEIGHBOR_RADIUS_M) neighbors++
+      }
+
+      // 2. Must have enough nearby buildings.
+      if (neighbors < MIN_NEIGHBORS) { gridRow++; continue }
+
+      // Deterministic hash for spread (no Math.random).
+      let h = (gridCol * 73856093) ^ (gridRow * 19349663)
+      h = ((h >>> 16) ^ h) * 0x45d9f3b
+      h = (h >>> 16) ^ h
+
+      cands.push({ lon, lat, neighbors, hash: h >>> 0 })
+      gridRow++
+    }
+    gridCol++
+  }
+
+  // Sort by hash for deterministic spatial scatter (not by distance-to-center).
+  cands.sort((a, b) => a.hash - b.hash)
+
+  const chosen: { lon: number; lat: number }[] = []
+  for (const c of cands) {
+    if (chosen.every((p) => distM(c, p) >= SPOT_SPACING_M)) {
+      chosen.push({ lon: c.lon, lat: c.lat })
+      if (chosen.length >= MAX_SPOTS) break
+    }
+  }
+
+  return chosen.length >= MIN_VIABLE ? chosen : []
+}
+
 // ── Main screen ──────────────────────────────────────────────────────────────
 
 export default function ComplianceScreen() {
@@ -138,6 +357,8 @@ export default function ComplianceScreen() {
   const { t, lang } = useI18n()
   const cityBuildings = useCityBuildings(result?.plan.centroidWGS84)
   const { parcel, parcelArea } = useCadastralParcel(result?.plan.centroidWGS84)
+  const planGeometry = usePlanGeometry(result?.plan.centroidWGS84)
+  const cityRoads = useCityRoads(result?.plan.centroidWGS84)
 
   // Selected spot — null means no building placed yet.
   const [selectedSpot, setSelectedSpot] = useState<{ lon: number; lat: number } | null>(null)
@@ -153,11 +374,19 @@ export default function ComplianceScreen() {
   const floors = toNum(proposed['floors'] ?? 2, 2)
   const maxHeight = toNum(proposed['max_height'] ?? 9, 9)
 
-  // Available spots between existing buildings.
-  const spots = useMemo(
-    () => result ? computeSpots(result.plan.centroidWGS84, cityBuildings) : [],
-    [result?.plan.centroidWGS84, cityBuildings],
-  )
+  // Available spots — prefer plan geometry (XPlanung WFS), fall back to heuristic.
+  const spots = useMemo(() => {
+    if (!result) return []
+    if (planGeometry?.features.length) {
+      try {
+        const planSpots = computeSpotsFromPlan(
+          result.plan.centroidWGS84, planGeometry, cityBuildings, result.plan, cityRoads,
+        )
+        if (planSpots.length > 0) return planSpots
+      } catch { /* fall through to heuristic */ }
+    }
+    return computeSpots(result.plan.centroidWGS84, cityBuildings)
+  }, [result?.plan.centroidWGS84, planGeometry, cityBuildings, cityRoads])
 
   // Derive building footprint at the selected spot.
   const PLOT_AREA = 600
@@ -301,6 +530,11 @@ export default function ComplianceScreen() {
           )}
           {parcelArea != null && (
             <span> · {t('compliance.parcelArea', { area: Math.round(parcelArea) })}</span>
+          )}
+          {planGeometry && (
+            <span className="ml-auto text-[0.5rem] text-ink/30">
+              © Daten aus dem Geoportal Raumordnung Baden-Württemberg
+            </span>
           )}
         </div>
       </section>
