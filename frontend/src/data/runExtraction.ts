@@ -64,8 +64,8 @@ function delay(ms: number, signal?: AbortSignal): Promise<void> {
   })
 }
 
-/** The Vercel serverless extraction endpoint (same-origin). */
-const EXTRACT_ENDPOINT = '/api/extract'
+/** Extraction endpoint — same-origin in dev, or the VITE_API_URL backend in production. */
+const EXTRACT_ENDPOINT = `${import.meta.env.VITE_API_URL ?? ''}/api/extract`
 
 export interface ExtractionOutcome {
   result: ExtractionResult
