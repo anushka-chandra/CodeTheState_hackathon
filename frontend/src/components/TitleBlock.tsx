@@ -29,7 +29,7 @@ export default function TitleBlock() {
           </div>
           <div className="leading-none">
             <h1 className="font-display text-2xl font-extrabold uppercase tracking-[0.22em] text-ink">
-              Planraum
+              KeyStone
             </h1>
             <p className="mt-1 font-body text-[0.7rem] text-ink/60">
               {t('app.tagline')}

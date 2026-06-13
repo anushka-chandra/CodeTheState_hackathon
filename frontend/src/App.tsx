@@ -34,7 +34,7 @@ export default function App() {
       <footer className="border-t border-grid-line bg-white">
         <div className="mx-auto flex max-w-[1400px] items-center justify-between px-4 py-2 sm:px-6">
           <span className="eyebrow">Komm.ONE · IPAI Builder Day · Heilbronn</span>
-          <span className="font-mono text-[0.6rem] text-ink/40">PLANRAUM v0.1</span>
+          <span className="font-mono text-[0.6rem] text-ink/40">KeyStone v0.1</span>
         </div>
       </footer>
     </div>
