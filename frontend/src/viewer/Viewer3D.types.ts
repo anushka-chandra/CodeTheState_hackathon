@@ -13,6 +13,7 @@ export interface Viewer3DProps {
     roofType: RoofType
     roofPitchDeg?: number
     compliant: boolean
+    rotationDeg?: number
   } | null
   /** Green available-site markers the user can click to place a building. */
   spots?: { lon: number; lat: number }[]

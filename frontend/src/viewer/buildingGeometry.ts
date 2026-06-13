@@ -27,16 +27,17 @@ export function buildProposedFeatures(
   roofType: RoofType,
   roofPitchDeg: number,
   compliant: boolean,
+  rotationDeg = 0,
 ): FeatureCollection {
   const ring = footprint.coordinates[0]
   if (!ring || ring.length < 4) {
-    return singleBox(footprint, heightM, compliant)
+    return rotateFC(singleBox(footprint, heightM, compliant), footprint, rotationDeg)
   }
 
   const bbox = getBBox(ring)
 
   if (roofType === 'flach') {
-    return flatRoof(footprint, bbox, heightM, compliant)
+    return rotateFC(flatRoof(footprint, bbox, heightM, compliant), footprint, rotationDeg)
   }
 
   // Compute eave vs ridge heights from pitch.
@@ -62,7 +63,7 @@ export function buildProposedFeatures(
     addGableSlices(features, bbox, eaveH, ridgeH, compliant)
   }
 
-  return { type: 'FeatureCollection', features }
+  return rotateFC({ type: 'FeatureCollection', features }, footprint, rotationDeg)
 }
 
 // ── Roof generators ──────────────────────────────────────────────────────────
@@ -251,6 +252,36 @@ interface BBox {
   minLat: number; maxLat: number
   widthM: number; heightM: number
   longAxisIsEW: boolean
+}
+
+/** Rotate every polygon vertex of a FeatureCollection about the footprint
+ *  centroid by `deg` degrees, in local metres (so walls + roof stay rigid). */
+function rotateFC(fc: FeatureCollection, footprint: Polygon, deg: number): FeatureCollection {
+  if (!deg) return fc
+  const ring = footprint.coordinates[0]
+  let cx = 0, cy = 0
+  const n = ring.length - 1
+  for (let i = 0; i < n; i++) { cx += ring[i][0]; cy += ring[i][1] }
+  cx /= n; cy /= n
+  const rad = (deg * Math.PI) / 180
+  const cos = Math.cos(rad), sin = Math.sin(rad)
+  const mPerDegLon = 111320 * Math.cos((cy * Math.PI) / 180)
+  const mPerDegLat = 110540
+  const rot = ([x, y]: number[]): number[] => {
+    const dx = (x - cx) * mPerDegLon
+    const dy = (y - cy) * mPerDegLat
+    const rx = dx * cos - dy * sin
+    const ry = dx * sin + dy * cos
+    return [cx + rx / mPerDegLon, cy + ry / mPerDegLat]
+  }
+  return {
+    type: 'FeatureCollection',
+    features: fc.features.map((f) =>
+      f.geometry.type === 'Polygon'
+        ? { ...f, geometry: { type: 'Polygon', coordinates: f.geometry.coordinates.map((r) => r.map(rot)) } }
+        : f,
+    ),
+  }
 }
 
 function getBBox(ring: number[][]): BBox {

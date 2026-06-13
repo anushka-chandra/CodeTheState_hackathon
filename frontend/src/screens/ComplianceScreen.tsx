@@ -123,27 +123,6 @@ function computeSpots(
   return []
 }
 
-function rotatePolygon(poly: Polygon, deg: number): Polygon {
-  if (!deg) return poly
-  const ring = poly.coordinates[0]
-  let cx = 0, cy = 0
-  const n = ring.length - 1
-  for (let i = 0; i < n; i++) { cx += ring[i][0]; cy += ring[i][1] }
-  cx /= n; cy /= n
-  const rad = (deg * Math.PI) / 180
-  const cos = Math.cos(rad), sin = Math.sin(rad)
-  const mPerDegLon = 111320 * Math.cos((cy * Math.PI) / 180)
-  const mPerDegLat = 110540
-  const rotated = ring.map(([x, y]) => {
-    const dx = (x - cx) * mPerDegLon
-    const dy = (y - cy) * mPerDegLat
-    const rx = dx * cos - dy * sin
-    const ry = dx * sin + dy * cos
-    return [cx + rx / mPerDegLon, cy + ry / mPerDegLat]
-  })
-  return { type: 'Polygon', coordinates: [rotated] }
-}
-
 // ── Main screen ──────────────────────────────────────────────────────────────
 
 export default function ComplianceScreen() {
@@ -214,8 +193,8 @@ export default function ComplianceScreen() {
       } satisfies Polygon
     }
 
-    return rotatePolygon(base, rotationDeg)
-  }, [selectedSpot, grz, parcel, parcelArea, rotationDeg])
+    return base
+  }, [selectedSpot, grz, parcel, parcelArea])
 
   const heightM = maxHeight > 0 ? maxHeight : Math.max(floors * 3, 3)
 
@@ -231,6 +210,7 @@ export default function ComplianceScreen() {
         roofType: roofTypeFromLabel(proposed['roof_type'] ?? 'unknown'),
         roofPitchDeg: toNum(proposed['roof_pitch'] ?? 38, 38),
         compliant: summary.fail === 0,
+        rotationDeg,
       }
     : null
 

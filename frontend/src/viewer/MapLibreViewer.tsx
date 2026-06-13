@@ -65,6 +65,7 @@ export default function MapLibreViewer({
       proposed.roofType,
       proposed.roofPitchDeg ?? 35,
       proposed.compliant,
+      proposed.rotationDeg ?? 0,
     )
   }, [proposed])
 
