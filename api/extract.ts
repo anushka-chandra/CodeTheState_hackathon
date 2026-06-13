@@ -198,13 +198,63 @@ function defaultFootprint(center: { lon: number; lat: number }, grz = 0.4) {
   }
 }
 
-function normalise(raw: any): ExtractionResult {
+/** Geocode a free-text place to lon/lat via OSM Nominatim (no API key). */
+async function geocode(query: string): Promise<{ lon: number; lat: number } | null> {
+  try {
+    const url =
+      'https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=de&q=' +
+      encodeURIComponent(query)
+    const r = await fetch(url, {
+      headers: { 'User-Agent': 'PLANRAUM/0.1 (IPAI Builder Day hackathon)' },
+    })
+    if (!r.ok) return null
+    const j = (await r.json()) as Array<{ lat?: string; lon?: string }>
+    if (Array.isArray(j) && j[0]?.lat && j[0]?.lon) {
+      const lat = Number(j[0].lat)
+      const lon = Number(j[0].lon)
+      if (Number.isFinite(lat) && Number.isFinite(lon)) return { lon, lat }
+    }
+  } catch {
+    /* network/parse failure → caller falls back */
+  }
+  return null
+}
+
+/** Best-effort centre for a plan from its name + municipality. */
+async function resolveCenter(
+  raw: any,
+): Promise<{ lon: number; lat: number } | undefined> {
+  const muni = String(raw?.plan?.municipality ?? '').trim()
+  const rawName = String(raw?.plan?.name ?? '')
+  // Strip boilerplate so the street/area survives, e.g.
+  // "Bebauungsplan und Örtliche Bauvorschriften 'Hindenburgstraße / Bahnhof'"
+  // → "Hindenburgstraße / Bahnhof"
+  const place = rawName
+    .replace(/bebauungsplan|örtliche|bauvorschriften|und|["'„""»«]/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+  const tries = [
+    place && muni ? `${place}, ${muni}, Germany` : '',
+    muni ? `${muni}, Germany` : '',
+  ].filter(Boolean)
+  for (const q of tries) {
+    const hit = await geocode(q)
+    if (hit) return hit
+  }
+  return undefined
+}
+
+function normalise(
+  raw: any,
+  centerOverride?: { lon: number; lat: number },
+): ExtractionResult {
   const center =
-    raw?.plan?.centroidWGS84 &&
+    centerOverride ??
+    (raw?.plan?.centroidWGS84 &&
     Number.isFinite(raw.plan.centroidWGS84.lon) &&
     Number.isFinite(raw.plan.centroidWGS84.lat)
       ? { lon: raw.plan.centroidWGS84.lon, lat: raw.plan.centroidWGS84.lat }
-      : DEFAULT_CENTER
+      : DEFAULT_CENTER)
 
   // Zones: from model, else wrap top-level constraints into one zone.
   let rawZones: any[] = Array.isArray(raw?.zones) ? raw.zones : []
@@ -324,7 +374,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const content = completion.choices?.[0]?.message?.content ?? ''
     const parsed = JSON.parse(stripFences(content))
-    const result = normalise(parsed)
+    const center = await resolveCenter(parsed)
+    const result = normalise(parsed, center)
 
     res.status(200).json(result)
   } catch (err) {

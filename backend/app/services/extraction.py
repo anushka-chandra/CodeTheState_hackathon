@@ -9,9 +9,12 @@ normalisation, same contract.
 
 import json
 import logging
+import math
 import os
 import re
 from typing import Any, Optional
+
+import httpx
 
 from openai import AsyncOpenAI
 
@@ -178,6 +181,58 @@ def _normalise_constraint(raw: dict[str, Any]) -> Optional[Constraint]:
     )
 
 
+async def _geocode(query: str) -> Optional[Centroid]:
+    """Geocode a free-text place to lon/lat via OSM Nominatim."""
+    url = (
+        "https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=de&q="
+        + query
+    )
+    try:
+        async with httpx.AsyncClient() as client:
+            r = await client.get(
+                url,
+                headers={"User-Agent": "PLANRAUM/0.1 (IPAI Builder Day hackathon)"},
+                timeout=5,
+            )
+            if r.status_code != 200:
+                return None
+            data = r.json()
+            if isinstance(data, list) and data and data[0].get("lat") and data[0].get("lon"):
+                lat = float(data[0]["lat"])
+                lon = float(data[0]["lon"])
+                if math.isfinite(lat) and math.isfinite(lon):
+                    return Centroid(lon=lon, lat=lat)
+    except Exception:
+        pass
+    return None
+
+
+async def _resolve_center(raw: dict[str, Any]) -> Optional[Centroid]:
+    """Best-effort centre for a plan from its name + municipality."""
+    plan_raw = raw.get("plan") or {}
+    muni = str(plan_raw.get("municipality") or "").strip()
+    raw_name = str(plan_raw.get("name") or "")
+    place = re.sub(
+        r"bebauungsplan|örtliche|bauvorschriften|und|[\"'„\u201c\u201d»«]",
+        " ",
+        raw_name,
+        flags=re.IGNORECASE,
+    )
+    place = re.sub(r"\s+", " ", place).strip()
+
+    tries = []
+    if place and muni:
+        tries.append(f"{place}, {muni}, Germany")
+    if muni:
+        tries.append(f"{muni}, Germany")
+
+    for q in tries:
+        hit = await _geocode(q)
+        if hit:
+            return hit
+    return None
+
+
 def _default_footprint(center: Centroid) -> Polygon:
     hw, hh = 0.000136, 0.0000629
     return Polygon(coordinates=[[
@@ -205,14 +260,20 @@ def _strip_fences(text: str) -> str:
     return t
 
 
-def _normalise(raw: dict[str, Any]) -> ExtractionResult:
+def _normalise(
+    raw: dict[str, Any],
+    center_override: Optional[Centroid] = None,
+) -> ExtractionResult:
     plan_raw = raw.get("plan") or {}
 
-    centroid_raw = plan_raw.get("centroidWGS84")
-    if centroid_raw and isinstance(centroid_raw.get("lon"), (int, float)) and isinstance(centroid_raw.get("lat"), (int, float)):
-        center = Centroid(lon=centroid_raw["lon"], lat=centroid_raw["lat"])
+    if center_override:
+        center = center_override
     else:
-        center = DEFAULT_CENTER
+        centroid_raw = plan_raw.get("centroidWGS84")
+        if centroid_raw and isinstance(centroid_raw.get("lon"), (int, float)) and isinstance(centroid_raw.get("lat"), (int, float)):
+            center = Centroid(lon=centroid_raw["lon"], lat=centroid_raw["lat"])
+        else:
+            center = DEFAULT_CENTER
 
     footprint_raw = raw.get("footprint")
     footprint = Polygon(**footprint_raw) if footprint_raw and footprint_raw.get("coordinates") else _default_footprint(center)
@@ -299,4 +360,5 @@ async def run_extraction_from_images(images: list[str]) -> ExtractionResult:
         logging.error("[EXTRACT] JSON parse failed: %s\nCleaned text: %s", e, cleaned[:1000])
         raise ValueError(f"Model response was not valid JSON: {e}") from e
 
-    return _normalise(parsed)
+    center = await _resolve_center(parsed)
+    return _normalise(parsed, center)
