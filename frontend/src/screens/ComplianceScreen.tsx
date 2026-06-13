@@ -252,6 +252,23 @@ export default function ComplianceScreen() {
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-3 font-mono text-[0.6rem] text-ink/55">
+            {selectedSpot && (
+              <span className="inline-flex items-center gap-2">
+                Rotation
+                <input
+                  type="range" min={0} max={359} value={rotationDeg}
+                  onChange={(e) => setRotationDeg(Number(e.target.value))}
+                  className="h-1 w-28 align-middle"
+                  aria-label="Rotate building"
+                />
+                <button
+                  type="button"
+                  onClick={() => setRotationDeg((rotationDeg + 15) % 360)}
+                  className="border border-ink/30 px-1.5 py-0.5 font-display text-[0.55rem] uppercase tracking-[0.12em] text-ink/60 hover:bg-plan-paper"
+                >+15°</button>
+                <span className="font-mono">{rotationDeg}°</span>
+              </span>
+            )}
             <Legend color="#2DD4A8" label={t('compliance.legendSpot')} />
             <Legend color="#8d8d8d" label={t('compliance.legendExisting')} />
           </div>
@@ -278,21 +295,6 @@ export default function ComplianceScreen() {
               >
                 {t('compliance.resetSpot')}
               </button>
-              <span className="ml-3 inline-flex items-center gap-2">
-                Rotation
-                <input
-                  type="range" min={0} max={359} value={rotationDeg}
-                  onChange={(e) => setRotationDeg(Number(e.target.value))}
-                  className="h-1 w-28 align-middle"
-                  aria-label="Rotate building"
-                />
-                <button
-                  type="button"
-                  onClick={() => setRotationDeg((rotationDeg + 15) % 360)}
-                  className="border border-ink/30 px-1.5 py-0.5 font-display text-[0.55rem] uppercase tracking-[0.12em] text-ink/60 hover:bg-plan-paper"
-                >+15°</button>
-                <span className="font-mono">{rotationDeg}°</span>
-              </span>
             </>
           ) : (
             <span>{t('viewer.selectSpot')}</span>
